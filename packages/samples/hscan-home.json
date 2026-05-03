@@ -1,0 +1,171 @@
+{
+  "url": "https://snucse.hscan.kr/",
+  "title": "온라인 의료영상 제증명 발급 서비스 | HScan",
+  "capturedAt": 1777776756151,
+  "summary": {
+    "total": 13,
+    "byRegion": {
+      "unknown": 13
+    }
+  },
+  "regions": {
+    "unknown": [
+      {
+        "idx": 0,
+        "tag": "a",
+        "role": "a",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": "/",
+        "hasId": false,
+        "hasTestid": false,
+        "classes": ""
+      },
+      {
+        "idx": 1,
+        "tag": "button",
+        "role": "button",
+        "label": "허서연님",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-main-120 border-global-main-300 cursor-pointer rou"
+      },
+      {
+        "idx": 2,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "cursor-pointer"
+      },
+      {
+        "idx": 3,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": ""
+      },
+      {
+        "idx": 4,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "group absolute top-1/2 left-0 z-10 -translate-y-1/2 rounded-"
+      },
+      {
+        "idx": 5,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "group absolute top-1/2 right-0 z-10 -translate-y-1/2 rounded"
+      },
+      {
+        "idx": 6,
+        "tag": "a",
+        "role": "a",
+        "label": "고객센터",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": "/customer-service",
+        "hasId": false,
+        "hasTestid": false,
+        "classes": ""
+      },
+      {
+        "idx": 7,
+        "tag": "a",
+        "role": "a",
+        "label": "이메일",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": "mailto:inquiry@healthhub.kr",
+        "hasId": false,
+        "hasTestid": false,
+        "classes": ""
+      },
+      {
+        "idx": 8,
+        "tag": "a",
+        "role": "a",
+        "label": "헬스허브",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": "https://www.healthhub.kr/",
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "text-shadow-text-strong text-footnote-medium leading-footnot"
+      },
+      {
+        "idx": 9,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "flex cursor-pointer items-center justify-center rounded-full"
+      },
+      {
+        "idx": 10,
+        "tag": "button",
+        "role": "button",
+        "label": "홈",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "g-[3px] flex flex-1 cursor-pointer flex-col items-center pt-"
+      },
+      {
+        "idx": 11,
+        "tag": "button",
+        "role": "button",
+        "label": "내 영상 목록",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "g-[3px] flex flex-1 cursor-pointer flex-col items-center pt-"
+      },
+      {
+        "idx": 12,
+        "tag": "button",
+        "role": "button",
+        "label": "내 정보",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "g-[3px] flex flex-1 cursor-pointer flex-col items-center pt-"
+      }
+    ]
+  }
+}

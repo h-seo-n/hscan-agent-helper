@@ -1,0 +1,123 @@
+{
+  "url": "https://snucse.hscan.kr/my-page",
+  "title": "온라인 의료영상 제증명 발급 서비스 | HScan",
+  "capturedAt": 1777777513291,
+  "summary": {
+    "total": 9,
+    "byRegion": {
+      "unknown": 9
+    }
+  },
+  "regions": {
+    "unknown": [
+      {
+        "idx": 0,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "cursor-pointer p-1"
+      },
+      {
+        "idx": 1,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": ""
+      },
+      {
+        "idx": 2,
+        "tag": "button",
+        "role": "button",
+        "label": "설정",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-main-900 shrink-0 cursor-pointer rounded-[10px] px"
+      },
+      {
+        "idx": 3,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-main-120 flex cursor-pointer items-center justify-"
+      },
+      {
+        "idx": 4,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "flex cursor-pointer items-center justify-center rounded-[10p"
+      },
+      {
+        "idx": 5,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-red-100 flex cursor-pointer items-center justify-c"
+      },
+      {
+        "idx": 6,
+        "tag": "button",
+        "role": "button",
+        "label": "홈",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "g-[3px] flex flex-1 cursor-pointer flex-col items-center pt-"
+      },
+      {
+        "idx": 7,
+        "tag": "button",
+        "role": "button",
+        "label": "내 영상 목록",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "g-[3px] flex flex-1 cursor-pointer flex-col items-center pt-"
+      },
+      {
+        "idx": 8,
+        "tag": "button",
+        "role": "button",
+        "label": "내 정보",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "g-[3px] flex flex-1 cursor-pointer flex-col items-center pt-"
+      }
+    ]
+  }
+}

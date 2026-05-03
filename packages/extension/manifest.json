@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Hscan AI Web Assistant",
+  "version": "0.1.0",
+  "description": "AI-powered in-page web assistant",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "Open Hscan Sidebar"
+  },
+  "side_panel": {
+    "default_path": "src/sidebar/index.html"
+  },
+  "permissions": ["sidePanel", "scripting", "activeTab", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/index.ts"],
+      "run_at": "document_idle"
+    }
+  ]
+}

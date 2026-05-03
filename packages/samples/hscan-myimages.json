@@ -1,0 +1,303 @@
+{
+  "url": "https://snucse.hscan.kr/images-list",
+  "title": "온라인 의료영상 제증명 발급 서비스 | HScan",
+  "capturedAt": 1777777596280,
+  "summary": {
+    "total": 24,
+    "byRegion": {
+      "unknown": 24
+    }
+  },
+  "regions": {
+    "unknown": [
+      {
+        "idx": 0,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "box-border cursor-pointer p-2"
+      },
+      {
+        "idx": 1,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "cursor-pointer p-1"
+      },
+      {
+        "idx": 2,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "cursor-pointer p-1"
+      },
+      {
+        "idx": 3,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": ""
+      },
+      {
+        "idx": 4,
+        "tag": "input",
+        "role": "input",
+        "label": "병원명 또는 이름 검색",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "text-text-heavy text-body-xlarge leading-body-normal font-me"
+      },
+      {
+        "idx": 5,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-main-120 cursor-pointer rounded-xl p-4"
+      },
+      {
+        "idx": 6,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "cursor-pointer"
+      },
+      {
+        "idx": 7,
+        "tag": "button",
+        "role": "button",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "cursor-pointer"
+      },
+      {
+        "idx": 8,
+        "tag": "input",
+        "role": "input",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": true,
+        "hasTestid": false,
+        "classes": "peer border-global-gray-100 h-5 w-5 cursor-pointer appearanc"
+      },
+      {
+        "idx": 9,
+        "tag": "button",
+        "role": "button",
+        "label": "확대",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-gray-050 rounded-lg py-1 text-footnote-medium lead"
+      },
+      {
+        "idx": 10,
+        "tag": "input",
+        "role": "input",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": true,
+        "hasTestid": false,
+        "classes": "peer border-global-gray-100 h-5 w-5 cursor-pointer appearanc"
+      },
+      {
+        "idx": 11,
+        "tag": "button",
+        "role": "button",
+        "label": "확대",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-gray-050 rounded-lg py-1 text-footnote-medium lead"
+      },
+      {
+        "idx": 12,
+        "tag": "input",
+        "role": "input",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": true,
+        "hasTestid": false,
+        "classes": "peer border-global-gray-100 h-5 w-5 cursor-pointer appearanc"
+      },
+      {
+        "idx": 13,
+        "tag": "button",
+        "role": "button",
+        "label": "확대",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-gray-050 rounded-lg py-1 text-footnote-medium lead"
+      },
+      {
+        "idx": 14,
+        "tag": "input",
+        "role": "input",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": true,
+        "hasTestid": false,
+        "classes": "peer border-global-gray-100 h-5 w-5 cursor-pointer appearanc"
+      },
+      {
+        "idx": 15,
+        "tag": "button",
+        "role": "button",
+        "label": "확대",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-gray-050 rounded-lg py-1 text-footnote-medium lead"
+      },
+      {
+        "idx": 16,
+        "tag": "input",
+        "role": "input",
+        "label": "",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": true,
+        "hasTestid": false,
+        "classes": "peer border-global-gray-100 h-5 w-5 cursor-pointer appearanc"
+      },
+      {
+        "idx": 17,
+        "tag": "button",
+        "role": "button",
+        "label": "확대",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-gray-050 rounded-lg py-1 text-footnote-medium lead"
+      },
+      {
+        "idx": 18,
+        "tag": "button",
+        "role": "button",
+        "label": "영상 올리기",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "bg-global-main-900 sticky right-4 ml-auto flex h-20 w-20 cur"
+      },
+      {
+        "idx": 19,
+        "tag": "button",
+        "role": "button",
+        "label": "의사공유",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "flex flex-1 cursor-pointer flex-col items-center gap-[3px] p"
+      },
+      {
+        "idx": 20,
+        "tag": "button",
+        "role": "button",
+        "label": "병원전달",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "flex flex-1 cursor-pointer flex-col items-center gap-[3px] p"
+      },
+      {
+        "idx": 21,
+        "tag": "button",
+        "role": "button",
+        "label": "CD신청",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "flex flex-1 cursor-pointer flex-col items-center gap-[3px] p"
+      },
+      {
+        "idx": 22,
+        "tag": "button",
+        "role": "button",
+        "label": "다운로드",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "flex flex-1 cursor-pointer flex-col items-center gap-[3px] p"
+      },
+      {
+        "idx": 23,
+        "tag": "button",
+        "role": "button",
+        "label": "삭제",
+        "region": "unknown",
+        "groupLabel": null,
+        "href": null,
+        "hasId": false,
+        "hasTestid": false,
+        "classes": "flex flex-1 cursor-pointer flex-col items-center gap-[3px] p"
+      }
+    ]
+  }
+}

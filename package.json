@@ -1,0 +1,29 @@
+{
+  "name": "hscan-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Web Assistant Chrome Extension monorepo",
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev:ext": "pnpm --filter @hscan/extension dev",
+    "dev:be": "pnpm --filter @hscan/backend dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint \"packages/**/src/**/*.{ts,tsx}\"",
+    "format": "prettier --write ."
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "@typescript-eslint/eslint-plugin": "^7.7.1",
+    "@typescript-eslint/parser": "^7.7.1",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  }
+}
