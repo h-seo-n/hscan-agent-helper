@@ -14,9 +14,5 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "paths": {
-      "@shared/types": ["./packages/shared-types/src/index.ts"],
-      "@shared/types/*": ["./packages/shared-types/src/*"]
-    }
   }
 }

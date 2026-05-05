@@ -4,7 +4,7 @@ import type {
   DomSnapshot,
   ExtensionMessage,
   PlanContext,
-} from '@shared/types';
+} from '@hscan/shared-types';
 import { BACKEND_URL } from '../shared/config';
 import {
   applyStepResult,
@@ -213,9 +213,8 @@ function handlePageReady(tabId: number | undefined, _url: string, _title: string
   const session = sessionsByTab.get(tabId);
   if (!session) return;
 
-  // page-ready can race ahead of the navigate step's step-result. If we're not
-  // yet in awaiting-page-ready, buffer the signal so runLoop consumes it as
-  // soon as the navigate transition completes.
+  // page-ready can race ahead of the navigate step's step-result. 
+  // If we're not yet in awaiting-page-ready, buffer the signal so runLoop consumes it as soon as the navigate transition completes.
   if (session.state !== 'awaiting-page-ready') {
     session.pendingPageReady = true;
     return;

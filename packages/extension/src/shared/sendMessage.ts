@@ -1,4 +1,4 @@
-import type { ExtensionMessage } from '@shared/types';
+import type { ExtensionMessage } from '@hscan/shared-types';
 
 export function sendRuntimeMessage<T = unknown>(message: ExtensionMessage): Promise<T> {
   return new Promise((resolve, reject) => {

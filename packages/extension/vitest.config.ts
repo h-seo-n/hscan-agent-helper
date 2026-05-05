@@ -4,7 +4,7 @@ import path from 'node:path';
 export default defineConfig({
   resolve: {
     alias: {
-      '@shared/types': path.resolve(__dirname, '../shared-types/src/index.ts'),
+      '@hscan/shared-types': path.resolve(__dirname, '../shared-types/src/index.ts'),
     },
   },
   test: {

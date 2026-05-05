@@ -153,6 +153,7 @@ export function parsePlan(raw: string, snapshot: DomSnapshot): PlanResult {
   } catch (e) {
     throw new Error(`invalid JSON: ${(e as Error).message}`);
   }
+
   const result = zActionPlan.safeParse(json);
   if (!result.success) {
     throw new Error(`schema mismatch: ${result.error.message}`);

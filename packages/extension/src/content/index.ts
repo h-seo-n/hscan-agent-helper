@@ -1,4 +1,4 @@
-import type { ActionStep, ExtensionMessage } from '@shared/types';
+import type { ActionStep, ExtensionMessage } from '@hscan/shared-types';
 import { extractSnapshot } from './extractor';
 import { showHighlight, hideHighlight } from './highlight';
 

@@ -8,7 +8,7 @@ import type {
   PlanSessionState,
   PlanSessionView,
   StepStatus,
-} from '@shared/types';
+} from '@hscan/shared-types';
 
 export interface PlanSession {
   id: string;
@@ -59,6 +59,7 @@ export function toView(session: PlanSession): PlanSessionView {
   return view;
 }
 
+// 세션의 현재 상태와 새로 추출된 스냅샷을 합쳐 Backend /plan 엔드포인트에 보낼 페이로드를 만든다
 export function buildPlanContext(session: PlanSession, snapshot: DomSnapshot): PlanContext {
   return {
     sessionId: session.id,
@@ -69,6 +70,7 @@ export function buildPlanContext(session: PlanSession, snapshot: DomSnapshot): P
   };
 }
 
+// 
 export function currentStep(session: PlanSession): ActionStep | null {
   if (!session.currentPlan) return null;
   return session.currentPlan.steps[session.currentStepIndex] ?? null;
@@ -76,7 +78,7 @@ export function currentStep(session: PlanSession): ActionStep | null {
 
 /**
  * Pure transition function — given a session and a step result, decide the next state.
- * Mutates the session in place and returns a Transition describing what happened so the
+ * Mutates the session in  place and returns a Transition describing what happened so the
  * orchestrator can perform side effects (request snapshot, call /plan, finish, etc).
  */
 export type Transition =
@@ -136,6 +138,7 @@ export function applyStepResult(
   return { kind: 'execute-next-step' };
 }
 
+// 새로 받은 ActionPlan을 세션에 장착
 export function loadPlan(session: PlanSession, plan: ActionPlan): Transition {
   session.currentPlan = plan;
   session.currentStepIndex = 0;

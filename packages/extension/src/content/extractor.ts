@@ -1,4 +1,4 @@
-import type { DomSnapshot, InteractiveElement, RegionName } from '@shared/types';
+import type { DomSnapshot, InteractiveElement, RegionName } from '@hscan/shared-types';
 
 const INTERACTIVE_SELECTOR = [
   'a[href]',

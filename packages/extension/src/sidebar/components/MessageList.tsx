@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@shared/types';
+import type { ChatMessage } from '@hscan/shared-types';
 
 interface Props {
   messages: ChatMessage[];

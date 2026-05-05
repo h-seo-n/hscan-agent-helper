@@ -10,3 +10,5 @@ build
 .vite
 .cache
 coverage
+*.pem
+*.crx

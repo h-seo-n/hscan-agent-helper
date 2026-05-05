@@ -8,7 +8,7 @@ const app = express();
 
 app.use(
   cors({
-    // TODO: replace in Prompt B — restrict to the production extension ID.
+    // TODO: restrict to the production extension ID.
     origin: (origin, callback) => {
       if (!origin || origin.startsWith('chrome-extension://')) {
         return callback(null, true);

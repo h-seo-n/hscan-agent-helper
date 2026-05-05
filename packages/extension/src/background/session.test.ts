@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ActionPlan } from '@shared/types';
+import type { ActionPlan } from '@hscan/shared-types';
 import { applyStepResult, createSession, currentStep, loadPlan } from './session';
 
 function makeSession() {

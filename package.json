@@ -1,5 +1,5 @@
 {
-  "name": "hscan-agent",
+  "name": "hscan-agent-helper",
   "version": "0.1.0",
   "private": true,
   "description": "AI Web Assistant Chrome Extension monorepo",

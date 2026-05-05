@@ -1,0 +1,74 @@
+<mxfile host="Electron">
+  <diagram id="SnTMaA__LSWVUaOxWVgy" name="Page-1">
+    <mxGraphModel dx="1341" dy="913" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="800" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="webpage" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;fontStyle=1;" value="Target Web Page&#xa;(DOM)" vertex="1">
+          <mxGeometry height="80" width="220" x="170" y="630" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-container" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;fontSize=14;fontStyle=1;dashed=1;" value="Chrome Extension (Manifest V3)" vertex="1">
+          <mxGeometry height="440" width="540" x="140" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="sidebar" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;align=center;" value="&lt;b&gt;Sidebar (React)&lt;/b&gt;&lt;br&gt;&lt;br&gt;• 사용자 입력 / 챗 UI&lt;br&gt;• ActionPlan 진행 표시" vertex="1">
+          <mxGeometry height="100" width="180" x="170" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="background" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;align=center;fontStyle=1;" value="Background Service Worker&#xa;&#xa;&#xa;Message Router&#xa;(Sidebar ↔ Content ↔ Backend)" vertex="1">
+          <mxGeometry height="100" width="220" x="420" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="content" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;align=center;" value="&lt;b&gt;Content Script&lt;/b&gt;&lt;br&gt;&lt;br&gt;• DOM Snapshot 추출&lt;br&gt;• Overlay / Highlight 렌더링&lt;br&gt;• 클릭 / 입력 자동 실행" vertex="1">
+          <mxGeometry height="100" width="220" x="170" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="shared" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=center;dashed=1;fontStyle=2;" value="&lt;font face=&quot;Courier New&quot;&gt;shared-types&lt;br&gt;(ActionPlan, DomSnapshot,&lt;br&gt;ExtensionMessage)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="180" x="450" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="backend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;align=center;fontStyle=1;" value="Backend (Express)&#xa;&#xa;&#xa;• 프롬프트 구성&#xa;• OpenAI 호출&#xa;• ActionPlan zod 검증" vertex="1">
+          <mxGeometry height="100" width="220" x="830" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="openai" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;align=center;fontStyle=1;" value="OpenAI API" vertex="1">
+          <mxGeometry height="100" width="120" x="1200" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="e_user_sidebar" edge="1" parent="1" source="9IFoRVzIxuyBAR76eZGC-1" style="endArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=11;strokeColor=#333333;labelBackgroundColor=default;" target="sidebar" value="자연어 요청">
+          <mxGeometry relative="1" x="-0.2727" y="10" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="80" y="370" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_sidebar_bg" edge="1" parent="1" source="sidebar" style="endArrow=classic;startArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;fontSize=11;strokeColor=#333333;labelBackgroundColor=light-dark(#e1d5e7, #ededed);" target="background" value="ExtensionMessage">
+          <mxGeometry relative="1" x="-0.3534" y="-14" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_content_bg" edge="1" parent="1" source="content" style="endArrow=classic;startArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.3;entryY=1;entryDx=0;entryDy=0;fontSize=11;strokeColor=#333333;labelBackgroundColor=light-dark(#e1d5e7, #ededed);" target="background" value="DomSnapshot ⇅&#xa;ActionStep 실행 명령">
+          <mxGeometry relative="1" x="0.4139" y="-35" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_bg_backend" edge="1" parent="1" source="background" style="endArrow=classic;startArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=11;strokeColor=#333333;labelBackgroundColor=none;" target="backend" value="&lt;span&gt;&lt;span&gt;&lt;font face=&quot;Courier New&quot;&gt;&lt;b&gt;POST /plan&lt;br&gt;&lt;/b&gt;&lt;/font&gt;&lt;/span&gt;&lt;font face=&quot;Courier New&quot;&gt;&lt;b&gt;{ intent, snapshot &lt;/b&gt;&lt;/font&gt;&lt;/span&gt;&lt;font face=&quot;Courier New&quot;&gt;&lt;b&gt;}&lt;/b&gt;&lt;/font&gt;">
+          <mxGeometry relative="1" x="0.1429" y="20" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_backend_openai" edge="1" parent="1" source="backend" style="endArrow=classic;startArrow=classic;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=11;strokeColor=#333333;" target="openai" value="prompt + JSON schema">
+          <mxGeometry relative="1" y="20" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_content_dom" edge="1" parent="1" source="content" style="endArrow=classic;startArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;fontSize=11;strokeColor=#b85450;fontStyle=1;" target="webpage" value="document.querySelector&#xa;click / input / scroll">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontStyle=1;" value="Flow: 사용자 의도 → ActionPlan(JSON) → DOM 조작" vertex="1">
+          <mxGeometry height="30" width="640" x="280" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_rule1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=2;fontColor=#666666;" value="규칙: ① DOM 조작은 Content Script만   ② OpenAI 호출은 Backend만   ③ Background는 dumb router" vertex="1">
+          <mxGeometry height="24" width="800" x="200" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="9IFoRVzIxuyBAR76eZGC-1" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1" value="User" vertex="1">
+          <mxGeometry height="30" width="60" y="205" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

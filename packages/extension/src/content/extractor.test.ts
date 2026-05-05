@@ -23,7 +23,7 @@ describe('extractSnapshot', () => {
     const logo = findById(snap, 'id:logo');
     const tab = findById(snap, 'tid:tab-images');
     const btn = findById(snap, 'id:btn-main');
-    const help = snap.regions.footer?.find((e) => e.label === '고객센터');
+    const help = snap.regions.footer?.find((e: any) => e.label === '고객센터');
 
     expect(logo?.region).toBe('header');
     expect(tab?.region).toBe('nav');

@@ -1,4 +1,4 @@
-import type { PlanSessionView } from '@shared/types';
+import type { PlanSessionView } from '@hscan/shared-types';
 
 interface Props {
   session: PlanSessionView | null;
