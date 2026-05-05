@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 const zEnv = z.object({
   OPENAI_API_KEY: z.string().min(1, 'OPENAI_API_KEY is required'),
-  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+  OPENAI_MODEL: z.string().default('gpt-5.4-mini'),
   PORT: z.coerce.number().int().positive().default(3001),
 });
 

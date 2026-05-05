@@ -1,5 +1,27 @@
-import type { ChatMessage, ExtensionMessage } from '@shared/types';
+import type {
+  ActionPlan,
+  ChatMessage,
+  DomSnapshot,
+  ExtensionMessage,
+  PlanContext,
+} from '@shared/types';
 import { BACKEND_URL } from '../shared/config';
+import {
+  applyStepResult,
+  buildPlanContext,
+  createSession,
+  currentStep,
+  loadPlan,
+  toView,
+  type PlanSession,
+  type Transition,
+} from './session';
+
+const SNAPSHOT_TIMEOUT_MS = 5000;
+const PAGE_READY_TIMEOUT_MS = 5000;
+
+const sessionsByTab = new Map<number, PlanSession>();
+const pageReadyTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
@@ -7,52 +29,336 @@ chrome.runtime.onInstalled.addListener(() => {
     .catch((err) => console.error('[bg] setPanelBehavior failed', err));
 });
 
-chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
   if (message.kind === 'user-input') {
     handleUserInput(message.message, message.history)
-      .then((reply) => {
-        const response: ExtensionMessage = { kind: 'assistant-reply', message: reply };
-        sendResponse(response);
-      })
+      .then(sendResponse)
       .catch((err: unknown) => {
         console.error('[bg] handleUserInput failed', err);
-        const fallback: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content:
-            err instanceof Error
-              ? `오류: ${err.message}`
-              : '알 수 없는 오류가 발생했습니다.',
-          createdAt: Date.now(),
-        };
-        const response: ExtensionMessage = { kind: 'assistant-reply', message: fallback };
-        sendResponse(response);
+        const fallback: ChatMessage = makeAssistantMessage(
+          err instanceof Error ? `오류: ${err.message}` : '알 수 없는 오류가 발생했습니다.',
+        );
+        sendResponse({ kind: 'assistant-reply', message: fallback } satisfies ExtensionMessage);
       });
     return true;
   }
+
+  if (message.kind === 'page-ready') {
+    handlePageReady(sender.tab?.id, message.url, message.title);
+    return false;
+  }
+
+  if (message.kind === 'cancel-session') {
+    cancelSession(message.sessionId);
+    return false;
+  }
+
   return false;
 });
 
 async function handleUserInput(
-  message: ChatMessage,
+  userMessage: ChatMessage,
   history: ChatMessage[],
-): Promise<ChatMessage> {
-  const res = await fetch(`${BACKEND_URL}/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: [...history, message] }),
-  });
-
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `Backend responded ${res.status}`);
+): Promise<ExtensionMessage> {
+  const tab = await getActiveTab();
+  if (!tab?.id) {
+    return {
+      kind: 'assistant-reply',
+      message: makeAssistantMessage('활성 탭을 찾지 못했어요.'),
+    };
   }
 
-  const data = (await res.json()) as { assistantMessage: string };
+  const existing = sessionsByTab.get(tab.id);
+  const session =
+    existing && existing.state !== 'failed' && existing.state !== 'done'
+      ? continueSession(existing, userMessage, history)
+      : startSession(tab.id, userMessage, history);
+  sessionsByTab.set(tab.id, session);
+  broadcast(session);
+
+  // Kick the loop. We don't block the user-input response on plan completion;
+  // the sidebar is updated via plan-update broadcasts and the final assistant message.
+  runLoop(session).catch((err) => {
+    console.error('[bg] loop failed', err);
+    session.state = 'failed';
+    session.errorMessage = err instanceof Error ? err.message : 'unknown';
+    broadcast(session);
+  });
+
+  // Acknowledge immediately with an empty reply; sidebar listens for plan-update for content.
+  return {
+    kind: 'assistant-reply',
+    message: makeAssistantMessage('…'),
+  };
+}
+
+function startSession(tabId: number, userMessage: ChatMessage, history: ChatMessage[]): PlanSession {
+  return createSession({
+    id: crypto.randomUUID(),
+    tabId,
+    originalUserMessage: userMessage.content,
+    history: [...history, userMessage],
+  });
+}
+
+function continueSession(
+  session: PlanSession,
+  userMessage: ChatMessage,
+  _history: ChatMessage[],
+): PlanSession {
+  session.history = [...session.history, userMessage];
+  session.state = 'idle';
+  session.executedSteps = [];
+  session.currentPlan = null;
+  session.currentStepIndex = 0;
+  session.retries = 0;
+  session.pendingPageReady = false;
+  session.originalUserMessage = userMessage.content;
+  return session;
+}
+
+async function runLoop(session: PlanSession): Promise<void> {
+  // Loop until terminal state.
+  // Each iteration corresponds to one external interaction (snapshot, plan, step exec).
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (session.state === 'idle' || session.state === 'awaiting-page-ready') {
+      // For idle we drive forward. awaiting-page-ready is driven by page-ready handler;
+      // when it resolves it transitions to fetching-snapshot and re-enters this loop.
+      if (session.state === 'awaiting-page-ready') return;
+      session.state = 'fetching-snapshot';
+      broadcast(session);
+    }
+
+    if (session.state === 'fetching-snapshot') {
+      const snapshot = await requestSnapshot(session.tabId);
+      if (!snapshot) {
+        session.state = 'failed';
+        session.errorMessage = '스냅샷을 가져오지 못했어요.';
+        broadcast(session);
+        await postAssistantMessage(session.errorMessage);
+        return;
+      }
+      session.lastSnapshot = snapshot;
+      session.state = 'calling-plan';
+      broadcast(session);
+    }
+
+    if (session.state === 'calling-plan') {
+      if (!session.lastSnapshot) {
+        session.state = 'failed';
+        session.errorMessage = '내부 오류: 스냅샷 없음.';
+        broadcast(session);
+        return;
+      }
+      const planResult = await callPlan(buildPlanContext(session, session.lastSnapshot));
+      if (!planResult) {
+        session.state = 'failed';
+        session.errorMessage = '플랜 호출에 실패했어요.';
+        broadcast(session);
+        await postAssistantMessage(session.errorMessage);
+        return;
+      }
+      const transition = loadPlan(session, planResult);
+      // Always relay the assistant message coming with the plan.
+      if (planResult.assistantMessage) {
+        await postAssistantMessage(planResult.assistantMessage);
+      }
+      broadcast(session);
+      if (transition.kind === 'finish-done') return;
+    }
+
+    if (session.state === 'executing-step') {
+      const step = currentStep(session);
+      if (!step) {
+        session.state = 'done';
+        broadcast(session);
+        return;
+      }
+      const result = await sendToContent(session.tabId, { kind: 'execute-step', step });
+      if (!result || result.kind !== 'step-result') {
+        session.state = 'failed';
+        session.errorMessage = '실행 결과를 받지 못했어요.';
+        broadcast(session);
+        return;
+      }
+      const url = (await getTabUrl(session.tabId)) ?? '';
+      const transition = applyStepResult(session, result.stepId, result.status, url, result.reason);
+      broadcast(session);
+      if (transition.kind === 'finish-done') return;
+      if (transition.kind === 'finish-failed') {
+        await postAssistantMessage(`작업 실패: ${transition.reason}`);
+        return;
+      }
+      if (transition.kind === 'await-page-ready') {
+        // Drain a buffered page-ready that arrived before the transition.
+        if (session.pendingPageReady) {
+          session.pendingPageReady = false;
+          session.state = 'fetching-snapshot';
+          broadcast(session);
+          continue;
+        }
+        armPageReadyTimeout(session);
+        return;
+      }
+      // execute-next-step or replan: continue the loop
+    }
+
+    if (session.state === 'done' || session.state === 'failed') return;
+  }
+}
+
+function handlePageReady(tabId: number | undefined, _url: string, _title: string) {
+  if (!tabId) return;
+  const session = sessionsByTab.get(tabId);
+  if (!session) return;
+
+  // page-ready can race ahead of the navigate step's step-result. If we're not
+  // yet in awaiting-page-ready, buffer the signal so runLoop consumes it as
+  // soon as the navigate transition completes.
+  if (session.state !== 'awaiting-page-ready') {
+    session.pendingPageReady = true;
+    return;
+  }
+
+  const timer = pageReadyTimers.get(tabId);
+  if (timer) {
+    clearTimeout(timer);
+    pageReadyTimers.delete(tabId);
+  }
+
+  session.pendingPageReady = false;
+  session.state = 'fetching-snapshot';
+  broadcast(session);
+  runLoop(session).catch((err) => {
+    console.error('[bg] post page-ready loop failed', err);
+    session.state = 'failed';
+    session.errorMessage = err instanceof Error ? err.message : 'unknown';
+    broadcast(session);
+  });
+}
+
+function armPageReadyTimeout(session: PlanSession) {
+  const tabId = session.tabId;
+  const existing = pageReadyTimers.get(tabId);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    pageReadyTimers.delete(tabId);
+    if (session.state !== 'awaiting-page-ready') return;
+    session.state = 'failed';
+    session.errorMessage = '페이지 이동이 시간 안에 완료되지 않았어요.';
+    broadcast(session);
+    void postAssistantMessage(session.errorMessage);
+  }, PAGE_READY_TIMEOUT_MS);
+  pageReadyTimers.set(tabId, t);
+}
+
+function cancelSession(sessionId: string) {
+  for (const [tabId, session] of sessionsByTab.entries()) {
+    if (session.id !== sessionId) continue;
+    session.state = 'failed';
+    session.errorMessage = '사용자가 취소했어요.';
+    const t = pageReadyTimers.get(tabId);
+    if (t) {
+      clearTimeout(t);
+      pageReadyTimers.delete(tabId);
+    }
+    broadcast(session);
+  }
+}
+
+async function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab;
+}
+
+async function getTabUrl(tabId: number): Promise<string | undefined> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return tab.url;
+  } catch {
+    return undefined;
+  }
+}
+
+async function requestSnapshot(tabId: number): Promise<DomSnapshot | null> {
+  const reply = await sendToContent(tabId, { kind: 'request-snapshot' }, SNAPSHOT_TIMEOUT_MS);
+  if (!reply || reply.kind !== 'snapshot-result') return null;
+  return reply.snapshot;
+}
+
+function sendToContent(
+  tabId: number,
+  message: ExtensionMessage,
+  timeoutMs = SNAPSHOT_TIMEOUT_MS,
+): Promise<ExtensionMessage | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const t = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(null);
+    }, timeoutMs);
+    chrome.tabs.sendMessage(tabId, message, (reply: ExtensionMessage | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(t);
+      const err = chrome.runtime.lastError;
+      if (err) {
+        console.warn('[bg] sendMessage error', err.message);
+        resolve(null);
+        return;
+      }
+      resolve(reply ?? null);
+    });
+  });
+}
+
+async function callPlan(ctx: PlanContext): Promise<ActionPlan | null> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ctx),
+    });
+    if (!res.ok) {
+      console.error('[bg] /plan responded', res.status);
+      return null;
+    }
+    const data = (await res.json()) as { plan: ActionPlan };
+    return data.plan;
+  } catch (err) {
+    console.error('[bg] /plan fetch failed', err);
+    return null;
+  }
+}
+
+function broadcast(session: PlanSession) {
+  const msg: ExtensionMessage = {
+    kind: 'plan-update',
+    sessionId: session.id,
+    session: toView(session),
+  };
+  // Ignore "no receivers" errors when sidebar is closed.
+  chrome.runtime.sendMessage(msg).catch(() => undefined);
+}
+
+async function postAssistantMessage(content: string) {
+  const reply: ExtensionMessage = {
+    kind: 'assistant-reply',
+    message: makeAssistantMessage(content),
+  };
+  chrome.runtime.sendMessage(reply).catch(() => undefined);
+}
+
+function makeAssistantMessage(content: string): ChatMessage {
   return {
     id: crypto.randomUUID(),
     role: 'assistant',
-    content: data.assistantMessage,
+    content,
     createdAt: Date.now(),
   };
 }
+
+// Expose transition helper type for tests via re-export consumed in vitest.
+export type { Transition };

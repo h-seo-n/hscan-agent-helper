@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { env } from './lib/env.js';
 import { chatRouter } from './routes/chat.js';
+import { planRouter } from './routes/plan.js';
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/chat', chatRouter);
+app.use('/plan', planRouter);
 
 app.listen(env.PORT, () => {
   console.log(`[backend] listening on http://localhost:${env.PORT}`);

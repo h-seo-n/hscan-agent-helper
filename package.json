@@ -7,6 +7,8 @@
   "scripts": {
     "dev:ext": "pnpm --filter @hscan/extension dev",
     "dev:be": "pnpm --filter @hscan/backend dev",
+    "dev:demo": "pnpm --filter @hscan/demo dev",
+    "test": "pnpm -r --if-present test",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint \"packages/**/src/**/*.{ts,tsx}\"",
@@ -23,7 +25,9 @@
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.34.1",
     "eslint-plugin-react-hooks": "^4.6.2",
+    "jsdom": "^24.0.0",
     "prettier": "^3.2.5",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
   }
 }
