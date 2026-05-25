@@ -45,6 +45,13 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
   if (message.kind === 'request-snapshot') {
     try {
       const snapshot = extractSnapshot();
+      console.info('[content] snapshot ready', {
+        url: snapshot.url,
+        elementCount: Object.values(snapshot.regions).reduce(
+          (count, items) => count + (items?.length ?? 0),
+          0,
+        ),
+      });
       const reply: ExtensionMessage = { kind: 'snapshot-result', snapshot };
       sendResponse(reply);
     } catch (err) {
@@ -85,14 +92,14 @@ interface StepOutcome {
   reason?: string;
 }
 
-async function executeStep(step: ActionStep): Promise<StepOutcome> {
+export async function executeStep(step: ActionStep): Promise<StepOutcome> {
   switch (step.type) {
     case 'explain':
-      hideHighlight();
       return { status: 'done' };
 
     case 'highlight': {
       const el = findTarget(step.targetId);
+      console.info('[content] highlight target', step.targetId, el);
       if (!el) return { status: 'failed', reason: `target ${step.targetId} not found` };
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       showHighlight(el, step.description);

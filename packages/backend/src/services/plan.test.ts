@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { DomSnapshot } from '@hscan/shared-types';
-import { parsePlan } from './plan';
+import type { DomSnapshot, InteractiveElement, PlanContext, RegionName } from '@hscan/shared-types';
+import { deterministicPlan, fallbackPlan, parsePlan } from './plan';
 
 const snapshot: DomSnapshot = {
   url: 'http://localhost:5174/',
@@ -106,3 +106,170 @@ describe('parsePlan', () => {
     expect(() => parsePlan('{not json', snapshot)).toThrowError(/invalid JSON/);
   });
 });
+
+describe('fallbackPlan', () => {
+  it('highlights the receive card for a Korean receive request when it is visible', () => {
+    const receiveSnapshot: DomSnapshot = {
+      ...snapshot,
+      regions: {
+        ...snapshot.regions,
+        main: [
+          {
+            id: 'id:card-receive',
+            tag: 'button',
+            role: 'button',
+            label: '내 영상 병원에서 받기',
+            selector: '[data-aiwa-id="id:card-receive"]',
+            region: 'main',
+            visibleNow: true,
+          },
+        ],
+      },
+    };
+
+    const result = fallbackPlan({
+      sessionId: 's1',
+      originalUserMessage: '내 영상 받고 싶어',
+      history: [],
+      snapshot: receiveSnapshot,
+      executedSteps: [],
+    });
+
+    expect(result.plan.steps[0]).toMatchObject({
+      type: 'highlight',
+      targetId: 'id:card-receive',
+    });
+    expect(result.plan.done).toBe(true);
+  });
+});
+
+describe('deterministicPlan', () => {
+  it.each([
+    ['내 영상 의사에게 보여주고 싶어', 'id:card-share'],
+    ['내 영상 CD로 배송 받고 싶어', 'id:card-cd'],
+    ['내 영상 받고 싶어', 'id:card-receive'],
+    ['내 영상 병원으로 보내고 싶어', 'id:card-send'],
+    ['고객센터 어디야', 'link-cs'],
+  ])('matches home scenario: %s', (message, targetId) => {
+    const result = deterministicPlan(makeContext(message, homeSnapshot()));
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'highlight',
+      targetId,
+    });
+    expect(result?.plan.done).toBe(true);
+  });
+
+  it.each([
+    ['영상 다운로드 하고 싶어', 'btn-download'],
+    ['영상 삭제하고 싶어', 'btn-delete'],
+    ['의사에게 공유하고 싶어', 'btn-share'],
+    ['병원으로 전달하고 싶어', 'btn-transfer'],
+    ['CD 신청하고 싶어', 'btn-cd'],
+    ['영상 검색하고 싶어', 'search-input'],
+    ['영상 올리고 싶어', 'btn-upload'],
+  ])('matches images page scenario: %s', (message, targetId) => {
+    const result = deterministicPlan(makeContext(message, imagesSnapshot()));
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'highlight',
+      targetId,
+    });
+    expect(result?.plan.done).toBe(true);
+  });
+
+  it('navigates to images page before handling image-only actions from home', () => {
+    const result = deterministicPlan(makeContext('영상 다운로드 하고 싶어', homeSnapshot()));
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'navigate',
+      targetId: 'tid:tab-images',
+      expectedUrlPattern: '/images',
+    });
+    expect(result?.plan.done).toBe(false);
+  });
+});
+
+function makeContext(message: string, domSnapshot: DomSnapshot): PlanContext {
+  return {
+    sessionId: 's1',
+    originalUserMessage: message,
+    history: [
+      {
+        id: 'm1',
+        role: 'user',
+        content: message,
+        createdAt: 0,
+      },
+    ],
+    snapshot: domSnapshot,
+    executedSteps: [],
+  };
+}
+
+function homeSnapshot(): DomSnapshot {
+  return {
+    ...snapshot,
+    regions: {
+      ...snapshot.regions,
+      nav: [
+        {
+          id: 'tid:tab-images',
+          tag: 'a',
+          role: 'a',
+          label: '내 영상 목록',
+          selector: '[data-aiwa-id="tid:tab-images"]',
+          region: 'nav',
+          visibleNow: true,
+        },
+      ],
+      main: [
+        homeElement('id:card-share', '내 영상 의사에게 보여주기 담당 의사에게 영상 링크를 공유합니다.'),
+        homeElement('id:card-cd', '내 영상 CD로 배송 받기 CD를 신청하고 우편으로 받아봅니다.'),
+        homeElement('id:card-receive', '내 영상 병원에서 받기 진료받은 병원의 영상을 내 계정으로 가져옵니다.'),
+        homeElement('id:card-send', '내 영상 병원으로 보내기 다른 병원의 진료실로 영상을 전달합니다.'),
+      ],
+      footer: [
+        homeElement('link-cd-guide', 'CD 발급 가이드', 'footer', 'a'),
+        homeElement('link-data-guide', '자료 받기 안내', 'footer', 'a'),
+        homeElement('link-cs', '고객센터', 'footer', 'a'),
+      ],
+    },
+  };
+}
+
+function imagesSnapshot(): DomSnapshot {
+  return {
+    ...snapshot,
+    url: 'http://localhost:5174/images',
+    regions: {
+      ...snapshot.regions,
+      main: [
+        homeElement('search-input', '병원명 또는 이름 검색', 'main', 'input'),
+        homeElement('btn-upload', '영상 올리기'),
+        homeElement('btn-share', '의사공유'),
+        homeElement('btn-transfer', '병원전달'),
+        homeElement('btn-cd', 'CD신청'),
+        homeElement('btn-download', '다운로드'),
+        homeElement('btn-delete', '삭제'),
+      ],
+    },
+  };
+}
+
+function homeElement(
+  id: string,
+  label: string,
+  region: RegionName = 'main',
+  tag = 'button',
+): InteractiveElement {
+  return {
+    id,
+    tag,
+    role: tag,
+    label,
+    selector: `[data-aiwa-id="${id}"]`,
+    region,
+    visibleNow: true,
+  };
+}

@@ -19,6 +19,7 @@ import {
 
 const SNAPSHOT_TIMEOUT_MS = 5000;
 const PAGE_READY_TIMEOUT_MS = 5000;
+const CONTENT_SCRIPT_RETRY_DELAYS_MS = [100, 250, 500];
 
 const sessionsByTab = new Map<number, PlanSession>();
 const pageReadyTimers = new Map<number, ReturnType<typeof setTimeout>>();
@@ -291,12 +292,47 @@ function sendToContent(
   message: ExtensionMessage,
   timeoutMs = SNAPSHOT_TIMEOUT_MS,
 ): Promise<ExtensionMessage | null> {
+  return sendToContentWithRecovery(tabId, message, timeoutMs);
+}
+
+interface ContentSendResult {
+  reply: ExtensionMessage | null;
+  errorMessage?: string;
+}
+
+async function sendToContentWithRecovery(
+  tabId: number,
+  message: ExtensionMessage,
+  timeoutMs: number,
+): Promise<ExtensionMessage | null> {
+  const first = await sendToContentOnce(tabId, message, timeoutMs);
+  if (first.reply) return first.reply;
+  if (!isMissingContentScript(first.errorMessage)) return null;
+
+  const injected = await injectContentScripts(tabId);
+  if (!injected) return null;
+
+  for (const delayMs of CONTENT_SCRIPT_RETRY_DELAYS_MS) {
+    await delay(delayMs);
+    const retry = await sendToContentOnce(tabId, message, timeoutMs);
+    if (retry.reply) return retry.reply;
+    if (!isMissingContentScript(retry.errorMessage)) return null;
+  }
+
+  return null;
+}
+
+function sendToContentOnce(
+  tabId: number,
+  message: ExtensionMessage,
+  timeoutMs: number,
+): Promise<ContentSendResult> {
   return new Promise((resolve) => {
     let settled = false;
     const t = setTimeout(() => {
       if (settled) return;
       settled = true;
-      resolve(null);
+      resolve({ reply: null });
     }, timeoutMs);
     chrome.tabs.sendMessage(tabId, message, (reply: ExtensionMessage | null) => {
       if (settled) return;
@@ -304,13 +340,41 @@ function sendToContent(
       clearTimeout(t);
       const err = chrome.runtime.lastError;
       if (err) {
-        console.warn('[bg] sendMessage error', err.message);
-        resolve(null);
+        console.warn('[bg] sendMessage error', message.kind, tabId, err.message);
+        resolve({ reply: null, errorMessage: err.message });
         return;
       }
-      resolve(reply ?? null);
+      resolve({ reply: reply ?? null });
     });
   });
+}
+
+function isMissingContentScript(errorMessage?: string): boolean {
+  return errorMessage?.includes('Receiving end does not exist') ?? false;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function injectContentScripts(tabId: number): Promise<boolean> {
+  const files =
+    chrome.runtime
+      .getManifest()
+      .content_scripts?.flatMap((contentScript) => contentScript.js ?? []) ?? [];
+  if (files.length === 0) return false;
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files,
+    });
+    console.info('[bg] injected missing content script', tabId);
+    return true;
+  } catch (err) {
+    console.warn('[bg] content script injection failed', tabId, err);
+    return false;
+  }
 }
 
 async function callPlan(ctx: PlanContext): Promise<ActionPlan | null> {

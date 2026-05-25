@@ -68,7 +68,9 @@ function ensureHost(): OverlayState {
 
 export function showHighlight(target: Element, text: string) {
   const s = ensureHost();
+  detachTargetListener(s.target);
   s.target = target;
+  s.target.addEventListener('click', onTargetClick, { once: true });
   s.caption.textContent = text;
   reposition();
   window.addEventListener('scroll', schedule, { passive: true });
@@ -77,11 +79,20 @@ export function showHighlight(target: Element, text: string) {
 
 export function hideHighlight() {
   if (!state) return;
+  detachTargetListener(state.target);
   state.target = null;
   state.box.style.display = 'none';
   state.caption.style.display = 'none';
   window.removeEventListener('scroll', schedule);
   window.removeEventListener('resize', schedule);
+}
+
+function onTargetClick() {
+  hideHighlight();
+}
+
+function detachTargetListener(target: Element | null) {
+  target?.removeEventListener('click', onTargetClick);
 }
 
 function schedule() {
