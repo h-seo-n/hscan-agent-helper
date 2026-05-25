@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 
 interface Props {
   disabled: boolean;
@@ -7,6 +7,7 @@ interface Props {
 
 export function MessageInput({ disabled, onSend }: Props) {
   const [value, setValue] = useState('');
+  const isComposingRef = useRef(false);
 
   const submit = () => {
     const trimmed = value.trim();
@@ -16,6 +17,7 @@ export function MessageInput({ disabled, onSend }: Props) {
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing || isComposingRef.current) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -28,6 +30,13 @@ export function MessageInput({ disabled, onSend }: Props) {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={onKeyDown}
+        onCompositionStart={() => {
+          isComposingRef.current = true;
+        }}
+        onCompositionEnd={(e) => {
+          isComposingRef.current = false;
+          setValue(e.currentTarget.value);
+        }}
         placeholder="메시지를 입력하세요 (Shift+Enter로 줄바꿈)"
         disabled={disabled}
       />

@@ -2,6 +2,8 @@ import type { ActionStep, ExtensionMessage } from '@hscan/shared-types';
 import { extractSnapshot } from './extractor';
 import { showHighlight, hideHighlight } from './highlight';
 
+const CLICK_FEEDBACK_MS = 500;
+
 let lastUrl = location.href;
 
 function announceReady() {
@@ -109,6 +111,9 @@ export async function executeStep(step: ActionStep): Promise<StepOutcome> {
     case 'click': {
       const el = findTarget(step.targetId);
       if (!el) return { status: 'failed', reason: `target ${step.targetId} not found` };
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showHighlight(el, step.description);
+      await delay(CLICK_FEEDBACK_MS);
       (el as HTMLElement).click();
       return { status: 'done' };
     }
@@ -117,6 +122,7 @@ export async function executeStep(step: ActionStep): Promise<StepOutcome> {
       const el = findTarget(step.targetId);
       if (!el) return { status: 'failed', reason: `target ${step.targetId} not found` };
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showHighlight(el, step.description);
       return { status: 'done' };
     }
 
@@ -129,6 +135,10 @@ export async function executeStep(step: ActionStep): Promise<StepOutcome> {
     default:
       return { status: 'failed', reason: 'unknown step type' };
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function findTarget(targetId: string): HTMLElement | null {

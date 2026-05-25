@@ -188,6 +188,32 @@ describe('deterministicPlan', () => {
     });
     expect(result?.plan.done).toBe(false);
   });
+
+  it.each([
+    ['내 영상 의사에게 보여주기 클릭해줘', 'id:card-share'],
+    ['첫 번째 카드 눌러줘', 'id:card-share'],
+    ['고객센터 클릭해줘', 'link-cs'],
+  ])('creates click steps for explicit click requests: %s', (message, targetId) => {
+    const result = deterministicPlan(makeContext(message, homeSnapshot()));
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'click',
+      targetId,
+    });
+    expect(result?.plan.done).toBe(true);
+  });
+
+  it('creates a scroll step for explicit scroll requests', () => {
+    const result = deterministicPlan(
+      makeContext('내 영상 병원으로 보내기 위치로 스크롤해줘', homeSnapshot()),
+    );
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'scroll',
+      targetId: 'id:card-send',
+    });
+    expect(result?.plan.done).toBe(true);
+  });
 });
 
 function makeContext(message: string, domSnapshot: DomSnapshot): PlanContext {

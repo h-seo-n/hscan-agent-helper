@@ -175,6 +175,9 @@ export function deterministicPlan(ctx: PlanContext): PlanResult | null {
   const intent = normalize(message);
   if (intent.length < 2) return null;
 
+  const explicitStep = explicitInteractionPlan(ctx.snapshot, intent);
+  if (explicitStep) return explicitStep;
+
   for (const rule of DIRECT_RULES) {
     if (!matchesAny(intent, rule.intent)) continue;
     const target = findElement(ctx.snapshot, rule.labels);
@@ -206,6 +209,63 @@ export function deterministicPlan(ctx: PlanContext): PlanResult | null {
     }
   }
 
+  return null;
+}
+
+function explicitInteractionPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
+  const type = explicitInteractionType(intent);
+  if (!type) return null;
+
+  const target = findExplicitTarget(snapshot, intent);
+  if (!target) return null;
+
+  const action = type === 'click' ? '클릭합니다.' : '이 위치로 이동합니다.';
+  return {
+    plan: {
+      steps: [
+        {
+          id: 's1',
+          type,
+          targetId: target.id,
+          description: `${target.label || '대상'} ${action}`,
+        },
+      ],
+      assistantMessage: `${target.label || '대상'} 위치를 ${type === 'click' ? '클릭할게요.' : '보여드릴게요.'}`,
+      done: true,
+    },
+    warnings: [],
+  };
+}
+
+function explicitInteractionType(intent: string): 'click' | 'scroll' | null {
+  if (matchesAny(intent, ['클릭', '눌러', '누르', '터치'])) return 'click';
+  if (matchesAny(intent, ['스크롤', '이동해', '위치로', '보여줘'])) return 'scroll';
+  return null;
+}
+
+function findExplicitTarget(snapshot: DomSnapshot, intent: string): InteractiveElement | null {
+  const ordinal = findOrdinalTarget(snapshot, intent);
+  if (ordinal) return ordinal;
+
+  for (const rule of DIRECT_RULES) {
+    if (!matchesAny(intent, rule.intent)) continue;
+    const target = findElement(snapshot, rule.labels);
+    if (target) return target;
+  }
+
+  const byLabel = allElements(snapshot).find((item) => item.visibleNow && normalize(item.label) && intent.includes(normalize(item.label)));
+  if (byLabel) return byLabel;
+
+  return null;
+}
+
+function findOrdinalTarget(snapshot: DomSnapshot, intent: string): InteractiveElement | null {
+  const cards = allElements(snapshot).filter((item) => item.visibleNow && item.tag === 'button' && normalize(item.id).includes('card'));
+  if (cards.length === 0) return null;
+  if (matchesAny(intent, ['첫번째', '첫째', '1번째', '1번'])) return cards[0] ?? null;
+  if (matchesAny(intent, ['두번째', '둘째', '2번째', '2번'])) return cards[1] ?? null;
+  if (matchesAny(intent, ['세번째', '셋째', '3번째', '3번'])) return cards[2] ?? null;
+  if (matchesAny(intent, ['네번째', '넷째', '4번째', '4번'])) return cards[3] ?? null;
   return null;
 }
 
