@@ -99,4 +99,33 @@ describe('executeStep', () => {
     expect(section.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
     expect(showHighlight).toHaveBeenCalledWith(section, '이 위치로 이동했습니다.');
   });
+
+  it('shows navigate feedback before clicking the target', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) =>
+      window.setTimeout(() => callback(performance.now()), 16),
+    );
+    const button = document.createElement('button');
+    button.setAttribute('data-aiwa-id', 'id:card-cd');
+    button.scrollIntoView = vi.fn();
+    const click = vi.spyOn(button, 'click');
+    document.body.appendChild(button);
+    const { executeStep } = await import('./index');
+
+    const result = executeStep({
+      id: 's1',
+      type: 'navigate',
+      targetId: 'id:card-cd',
+      expectedUrlPattern: '/cd-request',
+      description: 'CD 배송 신청 페이지로 이동합니다.',
+    });
+
+    expect(showHighlight).toHaveBeenCalledWith(button, 'CD 배송 신청 페이지로 이동합니다.');
+    expect(click).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(32);
+    await expect(result).resolves.toEqual({ status: 'navigated' });
+    expect(click).toHaveBeenCalledTimes(1);
+  });
 });

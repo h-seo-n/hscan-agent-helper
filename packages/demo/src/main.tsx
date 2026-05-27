@@ -5,6 +5,7 @@ import { AppShell } from './AppShell';
 import { HomePage } from './pages/HomePage';
 import { MyPage } from './pages/MyPage';
 import { ImagesPage } from './pages/ImagesPage';
+import { CdRequestPage } from './pages/CdRequestPage';
 import './styles.css';
 
 const container = document.getElementById('root');
@@ -18,6 +19,7 @@ createRoot(container).render(
           <Route path="/" element={<HomePage />} />
           <Route path="/my" element={<MyPage />} />
           <Route path="/images" element={<ImagesPage />} />
+          <Route path="/cd-request" element={<CdRequestPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppShell>

@@ -175,6 +175,9 @@ export function deterministicPlan(ctx: PlanContext): PlanResult | null {
   const intent = normalize(message);
   if (intent.length < 2) return null;
 
+  const cdRequest = cdRequestPlan(ctx.snapshot, intent);
+  if (cdRequest) return cdRequest;
+
   const explicitStep = explicitInteractionPlan(ctx.snapshot, intent);
   if (explicitStep) return explicitStep;
 
@@ -186,7 +189,7 @@ export function deterministicPlan(ctx: PlanContext): PlanResult | null {
 
   const needsImagesPage =
     matchesAny(intent, ['다운로드', '삭제', '검색', '영상검색', '목록', '리스트']) ||
-    matchesAny(intent, ['의사공유', '공유', '병원전달', '전달', 'CD신청']);
+    matchesAny(intent, ['의사공유', '공유', '병원전달', '전달']);
   if (needsImagesPage && !isImagesPage(ctx.snapshot)) {
     const tab = findElement(ctx.snapshot, ['내영상목록']);
     if (tab) {
@@ -210,6 +213,69 @@ export function deterministicPlan(ctx: PlanContext): PlanResult | null {
   }
 
   return null;
+}
+
+function cdRequestPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
+  if (!matchesAny(intent, ['CD신청', 'CD배송', 'CD로배송', 'CD받', '씨디신청', '씨디배송'])) {
+    return null;
+  }
+
+  if (isCdRequestPage(snapshot)) {
+    const firstInput = findElement(snapshot, ['수령인이름', '이름']);
+    if (!firstInput) return null;
+    return {
+      plan: {
+        steps: [
+          {
+            id: 's1',
+            type: 'input',
+            targetId: firstInput.id,
+            description: '먼저 수령인 이름을 입력하세요.',
+          },
+        ],
+        assistantMessage: 'CD 배송 신청을 위해 수령인 이름부터 입력하세요.',
+        done: true,
+      },
+      warnings: [],
+    };
+  }
+
+  const card = findElement(snapshot, ['내영상CD로배송받기']);
+  if (card) {
+    return {
+      plan: {
+        steps: [
+          {
+            id: 's1',
+            type: 'navigate',
+            targetId: card.id,
+            expectedUrlPattern: '/cd-request',
+            description: 'CD 배송 신청 페이지로 이동합니다.',
+          },
+        ],
+        assistantMessage: 'CD 배송 신청 페이지로 이동할게요.',
+        done: false,
+      },
+      warnings: [],
+    };
+  }
+
+  return {
+    plan: {
+      steps: [
+        {
+          id: 's1',
+          type: 'navigate',
+          url: '/cd-request',
+          expectedUrlPattern: '/cd-request',
+          description: 'CD 배송 신청 페이지로 이동합니다.',
+        },
+      ],
+      assistantMessage: 'CD 배송 신청 페이지로 이동할게요.',
+      done: false,
+    },
+    warnings: [],
+  };
 }
 
 function explicitInteractionPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
@@ -385,6 +451,10 @@ function allElements(snapshot: DomSnapshot): InteractiveElement[] {
 
 function isImagesPage(snapshot: DomSnapshot): boolean {
   return snapshot.url.includes('/images') || Boolean(findElement(snapshot, ['다운로드', '의사공유']));
+}
+
+function isCdRequestPage(snapshot: DomSnapshot): boolean {
+  return snapshot.url.includes('/cd-request') || Boolean(findElement(snapshot, ['수령인이름']));
 }
 
 function highlightPlan(target: InteractiveElement, rule: DirectRule): PlanResult {

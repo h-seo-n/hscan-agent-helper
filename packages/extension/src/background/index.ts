@@ -193,8 +193,9 @@ async function runLoop(session: PlanSession): Promise<void> {
       }
       if (transition.kind === 'await-page-ready') {
         // Drain a buffered page-ready that arrived before the transition.
-        if (session.pendingPageReady) {
+        if (session.pendingPageReady || isExpectedNavigationComplete(step, url)) {
           session.pendingPageReady = false;
+          await delay(100);
           session.state = 'fetching-snapshot';
           broadcast(session);
           continue;
@@ -355,6 +356,12 @@ function isMissingContentScript(errorMessage?: string): boolean {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isExpectedNavigationComplete(step: NonNullable<ReturnType<typeof currentStep>>, url: string): boolean {
+  if (step.type !== 'navigate') return false;
+  if (!step.expectedUrlPattern) return false;
+  return url.includes(step.expectedUrlPattern);
 }
 
 async function injectContentScripts(tabId: number): Promise<boolean> {

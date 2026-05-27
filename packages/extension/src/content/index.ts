@@ -22,7 +22,7 @@ function watchSpaNavigation() {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       hideHighlight();
-      announceReady();
+      afterNextPaint(announceReady);
     }
   };
   const wrap = (fn: typeof history.pushState) =>
@@ -141,6 +141,14 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function afterNextPaint(callback: () => void) {
+  requestAnimationFrame(() => requestAnimationFrame(callback));
+}
+
+function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => afterNextPaint(resolve));
+}
+
 function findTarget(targetId: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-aiwa-id="${cssEscape(targetId)}"]`);
 }
@@ -170,32 +178,36 @@ function executeInput(step: ActionStep & { type: 'input' }): Promise<StepOutcome
   });
 }
 
-function executeNavigate(step: ActionStep & { type: 'navigate' }): Promise<StepOutcome> {
+async function executeNavigate(step: ActionStep & { type: 'navigate' }): Promise<StepOutcome> {
   if (step.targetId) {
     const el = findTarget(step.targetId);
     if (!el) {
-      return Promise.resolve({ status: 'failed', reason: `target ${step.targetId} not found` });
+      return { status: 'failed', reason: `target ${step.targetId} not found` };
     }
-    queueMicrotask(() => el.click());
-    return Promise.resolve({ status: 'navigated' });
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showHighlight(el, step.description);
+    await delay(CLICK_FEEDBACK_MS);
+    el.click();
+    await waitForNextPaint();
+    return { status: 'navigated' };
   }
   if (step.url) {
     try {
       const target = new URL(step.url, location.href);
       if (target.origin !== location.origin) {
-        return Promise.resolve({
+        return {
           status: 'failed',
           reason: `cross-origin navigation not allowed: ${target.origin}`,
-        });
+        };
       }
       queueMicrotask(() => location.assign(target.href));
-      return Promise.resolve({ status: 'navigated' });
+      return { status: 'navigated' };
     } catch (err) {
-      return Promise.resolve({
+      return {
         status: 'failed',
         reason: err instanceof Error ? err.message : 'invalid url',
-      });
+      };
     }
   }
-  return Promise.resolve({ status: 'failed', reason: 'navigate step needs targetId or url' });
+  return { status: 'failed', reason: 'navigate step needs targetId or url' };
 }

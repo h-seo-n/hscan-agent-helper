@@ -146,7 +146,6 @@ describe('fallbackPlan', () => {
 describe('deterministicPlan', () => {
   it.each([
     ['내 영상 의사에게 보여주고 싶어', 'id:card-share'],
-    ['내 영상 CD로 배송 받고 싶어', 'id:card-cd'],
     ['내 영상 받고 싶어', 'id:card-receive'],
     ['내 영상 병원으로 보내고 싶어', 'id:card-send'],
     ['고객센터 어디야', 'link-cs'],
@@ -165,7 +164,6 @@ describe('deterministicPlan', () => {
     ['영상 삭제하고 싶어', 'btn-delete'],
     ['의사에게 공유하고 싶어', 'btn-share'],
     ['병원으로 전달하고 싶어', 'btn-transfer'],
-    ['CD 신청하고 싶어', 'btn-cd'],
     ['영상 검색하고 싶어', 'search-input'],
     ['영상 올리고 싶어', 'btn-upload'],
   ])('matches images page scenario: %s', (message, targetId) => {
@@ -187,6 +185,28 @@ describe('deterministicPlan', () => {
       expectedUrlPattern: '/images',
     });
     expect(result?.plan.done).toBe(false);
+  });
+
+  it('navigates to the CD request page from the home CD card', () => {
+    const result = deterministicPlan(makeContext('CD 신청하고 싶어', homeSnapshot()));
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'navigate',
+      targetId: 'id:card-cd',
+      expectedUrlPattern: '/cd-request',
+    });
+    expect(result?.plan.done).toBe(false);
+  });
+
+  it('highlights the first CD request input after arriving on the CD request page', () => {
+    const result = deterministicPlan(makeContext('CD 신청하고 싶어', cdRequestSnapshot()));
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'input',
+      targetId: 'cd-recipient',
+      description: '먼저 수령인 이름을 입력하세요.',
+    });
+    expect(result?.plan.done).toBe(true);
   });
 
   it.each([
@@ -278,6 +298,22 @@ function imagesSnapshot(): DomSnapshot {
         homeElement('btn-cd', 'CD신청'),
         homeElement('btn-download', '다운로드'),
         homeElement('btn-delete', '삭제'),
+      ],
+    },
+  };
+}
+
+function cdRequestSnapshot(): DomSnapshot {
+  return {
+    ...snapshot,
+    url: 'http://localhost:5174/cd-request',
+    regions: {
+      ...snapshot.regions,
+      main: [
+        homeElement('cd-recipient', '수령인 이름', 'main', 'input'),
+        homeElement('cd-phone', '연락처', 'main', 'input'),
+        homeElement('cd-address', '배송 주소', 'main', 'input'),
+        homeElement('btn-cd-submit', '확인'),
       ],
     },
   };

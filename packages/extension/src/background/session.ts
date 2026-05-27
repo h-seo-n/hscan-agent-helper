@@ -105,8 +105,9 @@ export function applyStepResult(
   session.executedSteps.push(executed);
 
   if (status === 'waiting-user') {
-    // stay on same step
-    return { kind: 'execute-next-step' };
+    session.currentStepIndex += 1;
+    session.state = 'done';
+    return { kind: 'finish-done' };
   }
   if (status === 'navigated') {
     session.state = 'awaiting-page-ready';
