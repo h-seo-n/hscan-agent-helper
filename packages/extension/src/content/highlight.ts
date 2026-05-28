@@ -1,4 +1,9 @@
 const HOST_ID = 'aiwa-overlay-host';
+const HIGHLIGHT_PADDING = 4;
+const CAPTION_GAP = 8;
+const VIEWPORT_MARGIN = 8;
+const CAPTION_FALLBACK_WIDTH = 180;
+const CAPTION_FALLBACK_HEIGHT = 28;
 
 interface OverlayState {
   host: HTMLElement;
@@ -11,7 +16,8 @@ interface OverlayState {
 let state: OverlayState | null = null;
 
 function ensureHost(): OverlayState {
-  if (state) return state;
+  if (state?.host.isConnected) return state;
+  state = null;
   const host = document.createElement('div');
   host.id = HOST_ID;
   Object.assign(host.style, {
@@ -68,7 +74,9 @@ function ensureHost(): OverlayState {
 
 export function showHighlight(target: Element, text: string) {
   const s = ensureHost();
+  detachTargetListener(s.target);
   s.target = target;
+  s.target.addEventListener('click', onTargetClick, { once: true });
   s.caption.textContent = text;
   reposition();
   window.addEventListener('scroll', schedule, { passive: true });
@@ -77,11 +85,20 @@ export function showHighlight(target: Element, text: string) {
 
 export function hideHighlight() {
   if (!state) return;
+  detachTargetListener(state.target);
   state.target = null;
   state.box.style.display = 'none';
   state.caption.style.display = 'none';
   window.removeEventListener('scroll', schedule);
   window.removeEventListener('resize', schedule);
+}
+
+function onTargetClick() {
+  hideHighlight();
+}
+
+function detachTargetListener(target: Element | null) {
+  target?.removeEventListener('click', onTargetClick);
 }
 
 function schedule() {
@@ -97,17 +114,99 @@ function schedule() {
 function reposition() {
   if (!state || !state.target) return;
   const r = state.target.getBoundingClientRect();
-  const pad = 4;
   Object.assign(state.box.style, {
     display: 'block',
-    top: `${r.top - pad}px`,
-    left: `${r.left - pad}px`,
-    width: `${r.width + pad * 2}px`,
-    height: `${r.height + pad * 2}px`,
+    top: `${r.top - HIGHLIGHT_PADDING}px`,
+    left: `${r.left - HIGHLIGHT_PADDING}px`,
+    width: `${r.width + HIGHLIGHT_PADDING * 2}px`,
+    height: `${r.height + HIGHLIGHT_PADDING * 2}px`,
   });
+
   Object.assign(state.caption.style, {
     display: 'block',
-    top: `${r.bottom + 8}px`,
-    left: `${r.left}px`,
+    visibility: 'hidden',
+    top: '0px',
+    left: '0px',
   });
+  const captionRect = state.caption.getBoundingClientRect();
+  const captionWidth = captionRect.width || CAPTION_FALLBACK_WIDTH;
+  const captionHeight = captionRect.height || CAPTION_FALLBACK_HEIGHT;
+  const captionPosition = getCaptionPosition(r, captionWidth, captionHeight);
+
+  Object.assign(state.caption.style, {
+    display: 'block',
+    visibility: 'visible',
+    top: `${captionPosition.top}px`,
+    left: `${captionPosition.left}px`,
+  });
+}
+
+function getCaptionPosition(
+  targetRect: DOMRect,
+  captionWidth: number,
+  captionHeight: number,
+): { top: number; left: number } {
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const spaceBelow = viewportHeight - targetRect.bottom - VIEWPORT_MARGIN - CAPTION_GAP;
+  const spaceAbove = targetRect.top - VIEWPORT_MARGIN - CAPTION_GAP;
+  const spaceRight = viewportWidth - targetRect.right - VIEWPORT_MARGIN - CAPTION_GAP;
+  const spaceLeft = targetRect.left - VIEWPORT_MARGIN - CAPTION_GAP;
+
+  if (spaceBelow >= captionHeight) {
+    return {
+      top: targetRect.bottom + CAPTION_GAP,
+      left: clamp(targetRect.left, VIEWPORT_MARGIN, viewportWidth - captionWidth - VIEWPORT_MARGIN),
+    };
+  }
+
+  const side = bestSide(spaceRight, spaceLeft, captionWidth);
+  if (side === 'right') {
+    return {
+      top: clamp(
+        targetRect.top + targetRect.height / 2 - captionHeight / 2,
+        VIEWPORT_MARGIN,
+        viewportHeight - captionHeight - VIEWPORT_MARGIN,
+      ),
+      left: targetRect.right + CAPTION_GAP,
+    };
+  }
+  if (side === 'left') {
+    return {
+      top: clamp(
+        targetRect.top + targetRect.height / 2 - captionHeight / 2,
+        VIEWPORT_MARGIN,
+        viewportHeight - captionHeight - VIEWPORT_MARGIN,
+      ),
+      left: targetRect.left - CAPTION_GAP - captionWidth,
+    };
+  }
+
+  if (spaceAbove >= captionHeight || spaceAbove >= spaceBelow) {
+    return {
+      top: Math.max(VIEWPORT_MARGIN, targetRect.top - CAPTION_GAP - captionHeight),
+      left: clamp(targetRect.left, VIEWPORT_MARGIN, viewportWidth - captionWidth - VIEWPORT_MARGIN),
+    };
+  }
+
+  return {
+    top: clamp(targetRect.bottom + CAPTION_GAP, VIEWPORT_MARGIN, viewportHeight - captionHeight - VIEWPORT_MARGIN),
+    left: clamp(targetRect.left, VIEWPORT_MARGIN, viewportWidth - captionWidth - VIEWPORT_MARGIN),
+  };
+}
+
+function bestSide(
+  spaceRight: number,
+  spaceLeft: number,
+  captionWidth: number,
+): 'right' | 'left' | null {
+  if (spaceRight >= captionWidth && spaceRight >= spaceLeft) return 'right';
+  if (spaceLeft >= captionWidth) return 'left';
+  if (spaceRight >= captionWidth) return 'right';
+  return null;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (max < min) return min;
+  return Math.min(Math.max(value, min), max);
 }

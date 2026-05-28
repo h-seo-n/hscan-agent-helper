@@ -2,6 +2,8 @@ import type { ActionStep, ExtensionMessage } from '@hscan/shared-types';
 import { extractSnapshot } from './extractor';
 import { showHighlight, hideHighlight } from './highlight';
 
+const CLICK_FEEDBACK_MS = 500;
+
 let lastUrl = location.href;
 
 function announceReady() {
@@ -20,7 +22,7 @@ function watchSpaNavigation() {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       hideHighlight();
-      announceReady();
+      afterNextPaint(announceReady);
     }
   };
   const wrap = (fn: typeof history.pushState) =>
@@ -45,6 +47,13 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
   if (message.kind === 'request-snapshot') {
     try {
       const snapshot = extractSnapshot();
+      console.info('[content] snapshot ready', {
+        url: snapshot.url,
+        elementCount: Object.values(snapshot.regions).reduce(
+          (count, items) => count + (items?.length ?? 0),
+          0,
+        ),
+      });
       const reply: ExtensionMessage = { kind: 'snapshot-result', snapshot };
       sendResponse(reply);
     } catch (err) {
@@ -85,14 +94,14 @@ interface StepOutcome {
   reason?: string;
 }
 
-async function executeStep(step: ActionStep): Promise<StepOutcome> {
+export async function executeStep(step: ActionStep): Promise<StepOutcome> {
   switch (step.type) {
     case 'explain':
-      hideHighlight();
       return { status: 'done' };
 
     case 'highlight': {
       const el = findTarget(step.targetId);
+      console.info('[content] highlight target', step.targetId, el);
       if (!el) return { status: 'failed', reason: `target ${step.targetId} not found` };
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       showHighlight(el, step.description);
@@ -102,6 +111,9 @@ async function executeStep(step: ActionStep): Promise<StepOutcome> {
     case 'click': {
       const el = findTarget(step.targetId);
       if (!el) return { status: 'failed', reason: `target ${step.targetId} not found` };
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showHighlight(el, step.description);
+      await delay(CLICK_FEEDBACK_MS);
       (el as HTMLElement).click();
       return { status: 'done' };
     }
@@ -110,6 +122,7 @@ async function executeStep(step: ActionStep): Promise<StepOutcome> {
       const el = findTarget(step.targetId);
       if (!el) return { status: 'failed', reason: `target ${step.targetId} not found` };
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showHighlight(el, step.description);
       return { status: 'done' };
     }
 
@@ -122,6 +135,18 @@ async function executeStep(step: ActionStep): Promise<StepOutcome> {
     default:
       return { status: 'failed', reason: 'unknown step type' };
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function afterNextPaint(callback: () => void) {
+  requestAnimationFrame(() => requestAnimationFrame(callback));
+}
+
+function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => afterNextPaint(resolve));
 }
 
 function findTarget(targetId: string): HTMLElement | null {
@@ -153,32 +178,36 @@ function executeInput(step: ActionStep & { type: 'input' }): Promise<StepOutcome
   });
 }
 
-function executeNavigate(step: ActionStep & { type: 'navigate' }): Promise<StepOutcome> {
+async function executeNavigate(step: ActionStep & { type: 'navigate' }): Promise<StepOutcome> {
   if (step.targetId) {
     const el = findTarget(step.targetId);
     if (!el) {
-      return Promise.resolve({ status: 'failed', reason: `target ${step.targetId} not found` });
+      return { status: 'failed', reason: `target ${step.targetId} not found` };
     }
-    queueMicrotask(() => el.click());
-    return Promise.resolve({ status: 'navigated' });
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showHighlight(el, step.description);
+    await delay(CLICK_FEEDBACK_MS);
+    el.click();
+    await waitForNextPaint();
+    return { status: 'navigated' };
   }
   if (step.url) {
     try {
       const target = new URL(step.url, location.href);
       if (target.origin !== location.origin) {
-        return Promise.resolve({
+        return {
           status: 'failed',
           reason: `cross-origin navigation not allowed: ${target.origin}`,
-        });
+        };
       }
       queueMicrotask(() => location.assign(target.href));
-      return Promise.resolve({ status: 'navigated' });
+      return { status: 'navigated' };
     } catch (err) {
-      return Promise.resolve({
+      return {
         status: 'failed',
         reason: err instanceof Error ? err.message : 'invalid url',
-      });
+      };
     }
   }
-  return Promise.resolve({ status: 'failed', reason: 'navigate step needs targetId or url' });
+  return { status: 'failed', reason: 'navigate step needs targetId or url' };
 }
