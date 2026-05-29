@@ -145,6 +145,20 @@ describe('fallbackPlan', () => {
 
 describe('deterministicPlan', () => {
   it.each([
+    ['홈으로 가줘', 'tid:tab-home'],
+    ['영상목록으로 가줘', 'tid:tab-images'],
+    ['내정보로 가줘', 'tid:tab-my'],
+  ])('clicks navigation tabs: %s', (message, targetId) => {
+    const result = deterministicPlan(makeContext(message, homeSnapshot()));
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'click',
+      targetId,
+    });
+    expect(result?.plan.done).toBe(true);
+  });
+
+  it.each([
     ['내 영상 의사에게 보여주고 싶어', 'id:card-share'],
     ['내 영상 받고 싶어', 'id:card-receive'],
     ['내 영상 병원으로 보내고 싶어', 'id:card-send'],
@@ -187,8 +201,90 @@ describe('deterministicPlan', () => {
     expect(result?.plan.done).toBe(false);
   });
 
+  it('navigates to images page before handling named image actions from home', () => {
+    const result = deterministicPlan(makeContext('무릎 영상 다운로드해줘', homeSnapshot()));
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'navigate',
+      targetId: 'tid:tab-images',
+      expectedUrlPattern: '/images',
+    });
+    expect(result?.plan.done).toBe(false);
+  });
+
+  it.each([
+    ['무릎 영상 다운로드해줘', 'chk-knee', 'btn-download'],
+    ['무를 영상 다운로드해줘', 'chk-knee', 'btn-download'],
+    ['Chest 병원으로 보내줘', 'chk-chest', 'btn-transfer'],
+    ['뇌 영상 삭제해줘', 'chk-brain', 'btn-delete'],
+    ['Spine 의사에게 보내줘', 'chk-spine', 'btn-share'],
+  ])('selects a named image before clicking the requested action: %s', (message, checkboxId, actionId) => {
+    const result = deterministicPlan(makeContext(message, imagesSnapshot()));
+
+    expect(result?.plan.steps).toEqual([
+      expect.objectContaining({
+        type: 'click',
+        targetId: checkboxId,
+      }),
+      expect.objectContaining({
+        type: 'click',
+        targetId: actionId,
+      }),
+    ]);
+    expect(result?.plan.done).toBe(true);
+  });
+
+  it('unchecks previously selected images before acting on the requested image', () => {
+    const result = deterministicPlan(
+      makeContext('Chest 병원으로 보내줘', imagesSnapshot(['chk-brain'])),
+    );
+
+    expect(result?.plan.steps).toEqual([
+      expect.objectContaining({
+        type: 'click',
+        targetId: 'chk-brain',
+      }),
+      expect.objectContaining({
+        type: 'click',
+        targetId: 'chk-chest',
+      }),
+      expect.objectContaining({
+        type: 'click',
+        targetId: 'btn-transfer',
+      }),
+    ]);
+  });
+
+  it('keeps the requested image selected and unchecks the others when it is already selected', () => {
+    const result = deterministicPlan(
+      makeContext('Chest 병원으로 보내줘', imagesSnapshot(['chk-brain', 'chk-chest'])),
+    );
+
+    expect(result?.plan.steps).toEqual([
+      expect.objectContaining({
+        type: 'click',
+        targetId: 'chk-brain',
+      }),
+      expect.objectContaining({
+        type: 'click',
+        targetId: 'btn-transfer',
+      }),
+    ]);
+  });
+
   it('navigates to the CD request page from the home CD card', () => {
     const result = deterministicPlan(makeContext('CD 신청하고 싶어', homeSnapshot()));
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'navigate',
+      targetId: 'id:card-cd',
+      expectedUrlPattern: '/cd-request',
+    });
+    expect(result?.plan.done).toBe(false);
+  });
+
+  it('treats "CD로 받고 싶어" as a CD request, not hospital receive', () => {
+    const result = deterministicPlan(makeContext('내 영상 cd로 받고 싶어', homeSnapshot()));
 
     expect(result?.plan.steps[0]).toMatchObject({
       type: 'navigate',
@@ -260,11 +356,29 @@ function homeSnapshot(): DomSnapshot {
       ...snapshot.regions,
       nav: [
         {
+          id: 'tid:tab-home',
+          tag: 'a',
+          role: 'a',
+          label: '홈',
+          selector: '[data-aiwa-id="tid:tab-home"]',
+          region: 'nav',
+          visibleNow: true,
+        },
+        {
           id: 'tid:tab-images',
           tag: 'a',
           role: 'a',
           label: '내 영상 목록',
           selector: '[data-aiwa-id="tid:tab-images"]',
+          region: 'nav',
+          visibleNow: true,
+        },
+        {
+          id: 'tid:tab-my',
+          tag: 'a',
+          role: 'a',
+          label: '내 정보',
+          selector: '[data-aiwa-id="tid:tab-my"]',
           region: 'nav',
           visibleNow: true,
         },
@@ -284,7 +398,7 @@ function homeSnapshot(): DomSnapshot {
   };
 }
 
-function imagesSnapshot(): DomSnapshot {
+function imagesSnapshot(checkedIds: string[] = []): DomSnapshot {
   return {
     ...snapshot,
     url: 'http://localhost:5174/images',
@@ -292,6 +406,10 @@ function imagesSnapshot(): DomSnapshot {
       ...snapshot.regions,
       main: [
         homeElement('search-input', '병원명 또는 이름 검색', 'main', 'input'),
+        homeElement('chk-knee', 'Knee (R) 선택', 'main', 'input', checkedIds.includes('chk-knee')),
+        homeElement('chk-chest', 'Chest 선택', 'main', 'input', checkedIds.includes('chk-chest')),
+        homeElement('chk-brain', 'Brain 선택', 'main', 'input', checkedIds.includes('chk-brain')),
+        homeElement('chk-spine', 'Spine 선택', 'main', 'input', checkedIds.includes('chk-spine')),
         homeElement('btn-upload', '영상 올리기'),
         homeElement('btn-share', '의사공유'),
         homeElement('btn-transfer', '병원전달'),
@@ -324,8 +442,9 @@ function homeElement(
   label: string,
   region: RegionName = 'main',
   tag = 'button',
+  checked?: boolean,
 ): InteractiveElement {
-  return {
+  const element: InteractiveElement = {
     id,
     tag,
     role: tag,
@@ -334,4 +453,6 @@ function homeElement(
     region,
     visibleNow: true,
   };
+  if (checked !== undefined) element.checked = checked;
+  return element;
 }

@@ -22,6 +22,7 @@ export const zInteractiveElement = z.object({
   groupLabel: z.string().optional(),
   visibleNow: z.boolean(),
   href: z.string().optional(),
+  checked: z.boolean().optional(),
   boundingRect: zBoundingRect.optional(),
 });
 export type InteractiveElement = z.infer<typeof zInteractiveElement>;
