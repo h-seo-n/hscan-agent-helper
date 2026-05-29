@@ -85,7 +85,10 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
       });
     return true;
   }
-
+  if (message.kind === 'hide-highlight') {
+    hideHighlight();
+    return false;
+  }
   return false;
 });
 
@@ -168,13 +171,28 @@ function executeInput(step: ActionStep & { type: 'input' }): Promise<StepOutcome
     el.setAttribute('data-aiwa-suggested', step.value);
   }
   return new Promise<StepOutcome>((resolve) => {
+
+    let settled = false;
+
     const onChange = () => {
+      if (settled) return;
+      settled = true;
       el.removeEventListener('input', onChange);
-      hideHighlight();
+      //hideHighlight();
       resolve({ status: 'done' });
     };
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      el.removeEventListener('input', onChange);
+      resolve({ status: 'waiting-user' });
+    }, 30_000);
     el.addEventListener('input', onChange);
-    setTimeout(() => resolve({ status: 'waiting-user' }), 200);
+    
+    const origOnChange = onChange;
+    el.addEventListener('input', () => clearTimeout(timer), { once: true });
+    //setTimeout(() => resolve({ status: 'waiting-user' }), 200);
   });
 }
 

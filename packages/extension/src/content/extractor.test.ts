@@ -121,3 +121,96 @@ function findById(snap: ReturnType<typeof extractSnapshot>, id: string) {
   }
   return undefined;
 }
+
+describe('getLabel', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('prefers aria-label over everything', () => {
+    setHtml(`<main><button aria-label="닫기">X</button></main>`);
+    const snap = extractSnapshot();
+    const btn = Object.values(snap.regions).flat().find((e) => e.tag === 'button');
+    expect(btn?.label).toBe('닫기');
+  });
+
+  it('falls back to title attribute when no text', () => {
+    setHtml(`<main><button title="설정"></button></main>`);
+    const snap = extractSnapshot();
+    const btn = Object.values(snap.regions).flat().find((e) => e.tag === 'button');
+    expect(btn?.label).toBe('설정');
+  });
+
+  it('extracts label from SVG <title> for icon-only button', () => {
+    setHtml(`
+      <main>
+        <button>
+          <svg><title>메뉴 열기</title></svg>
+        </button>
+      </main>
+    `);
+    const snap = extractSnapshot();
+    const btn = Object.values(snap.regions).flat().find((e) => e.tag === 'button');
+    expect(btn?.label).toBe('메뉴 열기');
+  });
+
+  it('extracts label from img alt for image button', () => {
+    setHtml(`<main><button><img alt="프로필 사진" /></button></main>`);
+    const snap = extractSnapshot();
+    const btn = Object.values(snap.regions).flat().find((e) => e.tag === 'button');
+    expect(btn?.label).toBe('프로필 사진');
+  });
+
+  it('falls back to previous sibling text', () => {
+    setHtml(`
+      <main>
+        <span>날짜 선택</span><button id="date-btn"></button>
+      </main>
+    `);
+    const snap = extractSnapshot();
+    const btn = Object.values(snap.regions).flat().find((e) => e.id === 'id:date-btn');
+    expect(btn?.label).toBe('날짜 선택');
+  });
+
+  it('uses aria-labelledby reference', () => {
+    setHtml(`
+      <main>
+        <span id="lbl-search">검색</span>
+        <input aria-labelledby="lbl-search" id="search" />
+      </main>
+    `);
+    const snap = extractSnapshot();
+    const input = Object.values(snap.regions).flat().find((e) => e.id === 'id:search');
+    expect(input?.label).toBe('검색');
+  });
+});
+
+describe('getRegion class hint', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    Object.defineProperty(window, 'innerWidth', { value: 480, configurable: true });
+  });
+
+  it('classifies by class name when no semantic tag', () => {
+    setHtml(`
+      <div class="navbar">
+        <button id="btn-nav">메뉴</button>
+      </div>
+    `);
+    const snap = extractSnapshot();
+    const btn = Object.values(snap.regions).flat().find((e) => e.id === 'id:btn-nav');
+    expect(btn?.region).toBe('nav');
+  });
+
+  it('classifies header by class name', () => {
+    setHtml(`
+      <div class="site-header">
+        <button id="btn-logo">로고</button>
+      </div>
+    `);
+    const snap = extractSnapshot();
+    const btn = Object.values(snap.regions).flat().find((e) => e.id === 'id:btn-logo');
+    expect(btn?.region).toBe('header');
+  });
+});

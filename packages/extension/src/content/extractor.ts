@@ -147,6 +147,13 @@ function getLabel(el: HTMLElement, doc: Document): string {
   const aria = el.getAttribute('aria-label');
   if (aria?.trim()) return aria.trim().slice(0, MAX_LABEL);
 
+  const labelledBy = el.getAttribute('aria-labelledby');
+  if (labelledBy) {
+    const ref = doc.getElementById(labelledBy);
+    const t = ref?.textContent?.trim();
+    if (t) return t.slice(0, MAX_LABEL);
+  }
+
   if (el.id) {
     const lbl = doc.querySelector<HTMLElement>(`label[for="${cssEscape(el.id)}"]`);
     const txt = lbl?.textContent?.trim();
@@ -156,12 +163,47 @@ function getLabel(el: HTMLElement, doc: Document): string {
   const placeholder = el.getAttribute('placeholder');
   if (placeholder?.trim()) return placeholder.trim().slice(0, MAX_LABEL);
 
-  const text = (el as HTMLElement).textContent?.replace(/\s+/g, ' ').trim();
+  const title = el.getAttribute('title');
+  if (title?.trim()) return title.trim().slice(0, MAX_LABEL);
+
+  const text = el.textContent?.replace(/\s+/g, ' ').trim();
   if (text) return text.slice(0, MAX_LABEL);
+
+  /*const text = (el as HTMLElement).textContent?.replace(/\s+/g, ' ').trim();
+  if (text) return text.slice(0, MAX_LABEL);*/
+  const svgTitle = el.querySelector<SVGTitleElement>('svg title');
+  if (svgTitle?.textContent?.trim()) return svgTitle.textContent.trim().slice(0, MAX_LABEL);
+
+  const img = el.querySelector<HTMLImageElement>('img[alt]');
+  if (img?.alt?.trim()) return img.alt.trim().slice(0, MAX_LABEL);
+
+  const prev = el.previousElementSibling;
+  const prevText = prev?.textContent?.replace(/\s+/g, ' ').trim();
+  if (prevText) return prevText.slice(0, MAX_LABEL);
+
+  const parentDirectText = Array.from(el.parentElement?.childNodes ?? [])
+    .filter((n) => n.nodeType === Node.TEXT_NODE)
+    .map((n) => n.textContent?.trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  if (parentDirectText) return parentDirectText.slice(0, MAX_LABEL);
+
+  const svg = el.querySelector('svg');
+  if (svg) {
+    const cls = (svg.getAttribute('class') ?? '').replace(/[-_]/g, ' ').trim();
+    if (cls) return cls.slice(0, MAX_LABEL);
+  }
 
   const name = el.getAttribute('name');
   return name?.trim() ?? '';
+
 }
+
+const getRect = (el) => {
+  const r = el.getBoundingClientRect();
+  return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
+};
 
 const SEMANTIC_REGION: Record<string, RegionName> = {
   header: 'header',
@@ -185,10 +227,29 @@ export function getRegion(el: HTMLElement, win: Window): RegionName {
     cur = cur.parentElement;
   }
 
+  const CLASS_HINTS: Array<[RegExp, RegionName]> = [
+    [/\b(header|top-?bar|site-?header|gnb)\b/i, 'header'],
+    [/\b(nav|navbar|navigation|tab-?bar|bottom-?bar|side-?bar|sidebar)\b/i, 'nav'],
+    [/\b(footer|site-?footer|bottom)\b/i, 'footer'],
+    [/\b(aside|side-?panel|drawer)\b/i, 'aside'],
+  ];
+
+  let cur3: HTMLElement | null = el;
+  while (cur3 && cur3 !== cur3.ownerDocument.body) {
+    const cls = cur3.className ?? '';
+    for (const [pattern, region] of CLASS_HINTS) {
+      if (pattern.test(cls)) return region;
+    }
+    cur3 = cur3.parentElement;
+  }
+
+  
+
   // Heuristic fallback based on position.
   const rect = el.getBoundingClientRect();
   const vh = win.innerHeight || 800;
   const vw = win.innerWidth || 480;
+
   const cur2 = nearestPositioned(el, win);
   if (cur2) {
     const pos = win.getComputedStyle(cur2).position;

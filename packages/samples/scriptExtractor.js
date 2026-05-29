@@ -78,6 +78,8 @@
       hasId: !!el.id,
       hasTestid: !!el.getAttribute('data-testid'),
       classes: (el.className || '').toString().slice(0, 60),
+      rect: getRect(el),
+
     }));
 
   const grouped = elements.reduce((acc, e) => {
