@@ -18,7 +18,7 @@ const CARDS: Card[] = [
     id: 'card-cd',
     title: '내 영상 CD로 배송 받기',
     description: 'CD를 신청하고 우편으로 받아봅니다.',
-    to: '/images',
+    to: '/cd-request',
   },
   {
     id: 'card-receive',

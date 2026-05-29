@@ -34,6 +34,12 @@ const onPagePlan: ActionPlan = {
   done: true,
 };
 
+const inputPlan: ActionPlan = {
+  steps: [{ id: 's1', type: 'input', targetId: 'cd-recipient', description: '수령인 이름 입력' }],
+  assistantMessage: '수령인 이름부터 입력하세요',
+  done: true,
+};
+
 describe('PlanSession transitions', () => {
   it('loadPlan moves to executing-step', () => {
     const s = makeSession();
@@ -82,6 +88,16 @@ describe('PlanSession transitions', () => {
     loadPlan(s, navigatePlan);
     const t = applyStepResult(s, 'bogus', 'done', 'http://x/');
     expect(t.kind).toBe('finish-failed');
+  });
+
+  it('waiting-user input step finishes without re-executing the same step', () => {
+    const s = makeSession();
+    loadPlan(s, inputPlan);
+    const t = applyStepResult(s, 's1', 'waiting-user', 'http://x/cd-request');
+    expect(t.kind).toBe('finish-done');
+    expect(s.state).toBe('done');
+    expect(s.currentStepIndex).toBe(1);
+    expect(s.executedSteps[0]?.status).toBe('waiting-user');
   });
 
   it('full sequence: navigate → page-ready → replan → highlight → done', () => {

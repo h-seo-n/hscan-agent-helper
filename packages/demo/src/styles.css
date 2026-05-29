@@ -165,6 +165,53 @@ button {
   color: #2563eb;
 }
 
+/* CD request */
+.cd-request__title {
+  font-size: 18px;
+  margin: 0 0 6px;
+}
+.cd-request__intro {
+  margin: 0 0 18px;
+  color: #6b7280;
+  font-size: 14px;
+}
+.cd-request__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.cd-request__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cd-request__field input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+  color: #1f2937;
+  font: inherit;
+  font-size: 14px;
+}
+.cd-request__field input:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.24);
+  border-color: #2563eb;
+  background: #ffffff;
+}
+.cd-request__submit {
+  margin-top: 6px;
+  width: 100%;
+  background: #2563eb;
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 12px;
+  font-weight: 600;
+}
+
 /* MyPage */
 .mypage__title {
   font-size: 18px;

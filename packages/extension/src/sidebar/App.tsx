@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ChatMessage, ExtensionMessage, PlanSessionView } from '@shared/types';
+import type { ChatMessage, ExtensionMessage, PlanSessionView } from '@hscan/shared-types';
 import { sendRuntimeMessage } from '../shared/sendMessage';
 import { MessageList } from './components/MessageList';
 import { MessageInput } from './components/MessageInput';
