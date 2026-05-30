@@ -77,6 +77,13 @@ describe('extractSnapshot', () => {
     const ids = collectIds(snap);
     expect(ids).toContain('id:i1');
   });
+
+  it('includes checkbox checked state', () => {
+    setHtml(`<main><label><input id="knee" type="checkbox" checked />Knee (R) 선택</label></main>`);
+    const snap = extractSnapshot();
+    const checkbox = findById(snap, 'id:knee');
+    expect(checkbox?.checked).toBe(true);
+  });
 });
 
 describe('getRegion heuristics', () => {
