@@ -176,5 +176,8 @@ export const zExtensionMessage = z.discriminatedUnion('kind', [
     kind: z.literal('cancel-session'),
     sessionId: z.string(),
   }),
+  z.object({
+    kind: z.literal('hide-highlight'),
+  })
 ]);
 export type ExtensionMessage = z.infer<typeof zExtensionMessage>;

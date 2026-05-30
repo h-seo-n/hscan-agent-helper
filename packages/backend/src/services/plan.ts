@@ -4,6 +4,8 @@ import {
   type DomSnapshot,
   type InteractiveElement,
   type PlanContext,
+  type InteractiveElement,
+  type RegionName,
   zActionPlan,
 } from '@hscan/shared-types';
 import { env } from '../lib/env.js';
@@ -37,8 +39,16 @@ Hard rules:
 6. Use executedSteps to understand what already happened on previous pages. Do not re-run a
    navigation that already succeeded. If executedSteps shows you already navigated and the user
    is now on the destination page, focus on highlighting the entry point.
-7. assistantMessage must be in the user's language (Korean here) and concise (one sentence).
-8. Each step must have a unique short "id" string (e.g. "s1", "s2").
+6. assistantMessage must be in the user's language (Korean here) and concise (one sentence).
+7. Each step must have a unique short "id" string (e.g. "s1", "s2").
+8. If all elements have region "unknown" (no semantic HTML landmarks), the page uses
+   div-only layout. In this case, infer purpose from:
+   - "label": the element's visible text (e.g. "홈", "내 영상 목록", "내 정보" → nav tabs)
+   - "visibleNow": prefer true elements as they are in the current viewport
+   - "href": links with path hints (e.g. href="/images" → likely navigation to image list)
+   - Common patterns: buttons with short labels like "홈"/"내 정보" at the bottom = tab bar (nav).
+     Anchor tags with href="/" and no label = logo (skip). Buttons with user name = profile.
+   Do NOT refuse to act just because region is "unknown". Use label and href to infer intent.
 
 Output strictly the following JSON shape:
 { "steps": ActionStep[], "assistantMessage": string, "done": boolean }
@@ -75,6 +85,29 @@ Output:
   "assistantMessage": "영상 목록 페이지로 이동할게요.",
   "done": false
 }
+Example 3 (multi-step on arrived page: highlight + input + click):
+User intent: "내 영상 다운로드 받고 싶어"
+Snapshot summary: page /images, main has input id="search-input" label="병원명 또는 이름 검색",
+button id="btn-download" label="다운로드".
+executedSteps: [{ type: "navigate", status: "navigated", finishedAtUrl: "/" }]
+Output:
+{
+  "steps": [
+    { "id": "s1", "type": "highlight", "targetId": "search-input", "description": "검색창 위치" },
+    { "id": "s2", "type": "input", "targetId": "search-input", "value": "", "description": "다운로드할 영상의 이름을 입력해 주세요." },
+    { "id": "s3", "type": "highlight", "targetId": "btn-download", "description": "다운로드 버튼 위치" },
+    { "id": "s4", "type": "explain", "description": "검색 후 다운로드 버튼을 누르면 영상을 받을 수 있어요." }
+  ],
+  "assistantMessage": "영상 이름을 검색한 뒤 다운로드 버튼을 눌러 주세요.",
+  "done": true
+}
+Example 4 (all regions unknown — div-only layout like real HScan):
+User intent: "내 영상 다운로드 받고 싶어"
+Snapshot summary: all elements have region "unknown".
+Elements include:
+  { id: "auto:abc-1", label: "홈", href: null }
+  { id: "auto:abc-2", label: "내 영상 목록", href: null }
+  { id: "auto:abc-3", label: "내 정보", href: null }
 
 Example 3 (home card is the current-page entry point):
 User intent: "내 영상 받고 싶어"
@@ -84,18 +117,13 @@ Output:
   "steps": [
     {
       "id": "s1",
-      "type": "highlight",
-      "targetId": "id:card-receive",
-      "description": "병원 영상 받기 시작 위치"
-    },
-    {
-      "id": "s2",
-      "type": "explain",
-      "description": "이 카드를 눌러 병원에서 받은 영상을 가져오세요."
+      "type": "navigate",
+      "targetId": "auto:abc-2",
+      "description": "영상 목록으로 이동합니다."
     }
   ],
-  "assistantMessage": "병원에서 영상을 받으려면 이 메뉴에서 시작하세요.",
-  "done": true
+  "assistantMessage": "영상 목록 페이지로 이동할게요.",
+  "done": false
 }
 `;
 
@@ -724,7 +752,7 @@ function buildUserPayload(ctx: PlanContext): string {
   return JSON.stringify({
     originalUserMessage,
     latestUserMessage: history[history.length - 1]?.content ?? originalUserMessage,
-    snapshot,
+    snapshot: compressSnapshot(snapshot),
     executedSteps: executedSteps.map((es) => ({
       step: es.step,
       status: es.status,
@@ -771,4 +799,57 @@ function collectIds(snapshot: DomSnapshot): Set<string> {
     for (const it of items ?? []) ids.add(it.id);
   }
   return ids;
+}
+
+function compressSnapshot(snapshot: DomSnapshot): DomSnapshot {
+  const MAX_ELEMENTS = 40;
+  const compressed: DomSnapshot = {
+    url: snapshot.url,
+    title: snapshot.title,
+    capturedAt: snapshot.capturedAt,
+    regions: {} as Record<RegionName, InteractiveElement[]>,
+  };
+
+
+  let total = 0;
+  const regionOrder: RegionName[] = ['nav', 'header', 'main', 'aside', 'footer', 'unknown'];
+
+ 
+  for (const region of regionOrder) {
+    const items = snapshot.regions[region] ?? [];
+    const visible = items.filter((it) => it.visibleNow);
+    compressed.regions[region] = visible.map(stripFields);
+    total += visible.length;
+  }
+
+
+  if (total < MAX_ELEMENTS) {
+    for (const region of regionOrder) {
+      const items = snapshot.regions[region] ?? [];
+      const hidden = items.filter((it) => !it.visibleNow);
+      const remaining = MAX_ELEMENTS - total;
+      const toAdd = hidden.slice(0, remaining).map(stripFields);
+      compressed.regions[region] = [...(compressed.regions[region] ?? []), ...toAdd];
+      total += toAdd.length;
+      if (total >= MAX_ELEMENTS) break;
+    }
+  }
+
+  return compressed;
+}
+
+function stripFields(it: InteractiveElement): InteractiveElement {
+  const out: InteractiveElement = {
+    id: it.id,
+    tag: it.tag,
+    role: it.role,
+    label: it.label,
+    selector: it.selector,
+    region: it.region,
+    visibleNow: it.visibleNow,
+  };
+  if (it.groupLabel) out.groupLabel = it.groupLabel;
+  if (it.href) out.href = it.href;
+
+  return out;
 }

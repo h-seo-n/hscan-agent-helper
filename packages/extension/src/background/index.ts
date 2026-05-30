@@ -24,6 +24,10 @@ const CONTENT_SCRIPT_RETRY_DELAYS_MS = [100, 250, 500];
 const sessionsByTab = new Map<number, PlanSession>();
 const pageReadyTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
+function cleanupHighlight(tabId: number) {
+  sendToContent(tabId, { kind: 'hide-highlight' }).catch(() => undefined);
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
@@ -81,6 +85,7 @@ async function handleUserInput(
   // the sidebar is updated via plan-update broadcasts and the final assistant message.
   runLoop(session).catch((err) => {
     console.error('[bg] loop failed', err);
+    cleanupHighlight(session.tabId);
     session.state = 'failed';
     session.errorMessage = err instanceof Error ? err.message : 'unknown';
     broadcast(session);
@@ -134,6 +139,7 @@ async function runLoop(session: PlanSession): Promise<void> {
     if (session.state === 'fetching-snapshot') {
       const snapshot = await requestSnapshot(session.tabId);
       if (!snapshot) {
+        cleanupHighlight(session.tabId);
         session.state = 'failed';
         session.errorMessage = '스냅샷을 가져오지 못했어요.';
         broadcast(session);
@@ -147,6 +153,7 @@ async function runLoop(session: PlanSession): Promise<void> {
 
     if (session.state === 'calling-plan') {
       if (!session.lastSnapshot) {
+        cleanupHighlight(session.tabId);
         session.state = 'failed';
         session.errorMessage = '내부 오류: 스냅샷 없음.';
         broadcast(session);
@@ -154,6 +161,7 @@ async function runLoop(session: PlanSession): Promise<void> {
       }
       const planResult = await callPlan(buildPlanContext(session, session.lastSnapshot));
       if (!planResult) {
+        cleanupHighlight(session.tabId);
         session.state = 'failed';
         session.errorMessage = '플랜 호출에 실패했어요.';
         broadcast(session);
@@ -172,12 +180,14 @@ async function runLoop(session: PlanSession): Promise<void> {
     if (session.state === 'executing-step') {
       const step = currentStep(session);
       if (!step) {
+        cleanupHighlight(session.tabId)
         session.state = 'done';
         broadcast(session);
         return;
       }
       const result = await sendToContent(session.tabId, { kind: 'execute-step', step });
       if (!result || result.kind !== 'step-result') {
+        cleanupHighlight(session.tabId);
         session.state = 'failed';
         session.errorMessage = '실행 결과를 받지 못했어요.';
         broadcast(session);
@@ -188,6 +198,7 @@ async function runLoop(session: PlanSession): Promise<void> {
       broadcast(session);
       if (transition.kind === 'finish-done') return;
       if (transition.kind === 'finish-failed') {
+        cleanupHighlight(session.tabId);
         await postAssistantMessage(`작업 실패: ${transition.reason}`);
         return;
       }
@@ -233,6 +244,7 @@ function handlePageReady(tabId: number | undefined, _url: string, _title: string
   broadcast(session);
   runLoop(session).catch((err) => {
     console.error('[bg] post page-ready loop failed', err);
+    cleanupHighlight(session.tabId);
     session.state = 'failed';
     session.errorMessage = err instanceof Error ? err.message : 'unknown';
     broadcast(session);
@@ -246,6 +258,7 @@ function armPageReadyTimeout(session: PlanSession) {
   const t = setTimeout(() => {
     pageReadyTimers.delete(tabId);
     if (session.state !== 'awaiting-page-ready') return;
+    cleanupHighlight(session.tabId);
     session.state = 'failed';
     session.errorMessage = '페이지 이동이 시간 안에 완료되지 않았어요.';
     broadcast(session);
@@ -257,6 +270,7 @@ function armPageReadyTimeout(session: PlanSession) {
 function cancelSession(sessionId: string) {
   for (const [tabId, session] of sessionsByTab.entries()) {
     if (session.id !== sessionId) continue;
+    cleanupHighlight(session.tabId);
     session.state = 'failed';
     session.errorMessage = '사용자가 취소했어요.';
     const t = pageReadyTimers.get(tabId);
