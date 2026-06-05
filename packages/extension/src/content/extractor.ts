@@ -209,6 +209,16 @@ const getRect = (el) => {
   return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
 };
 
+const getRect = (el) => {
+  const r = el.getBoundingClientRect();
+  return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
+};
+
+const getRect = (el) => {
+  const r = el.getBoundingClientRect();
+  return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
+};
+
 const SEMANTIC_REGION: Record<string, RegionName> = {
   header: 'header',
   banner: 'header',
