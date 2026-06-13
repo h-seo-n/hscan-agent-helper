@@ -203,6 +203,12 @@ export function deterministicPlan(ctx: PlanContext): PlanResult | null {
   const intent = normalize(message);
   if (intent.length < 2) return null;
 
+  const navClick = navClickPlan(ctx.snapshot, intent);
+  if (navClick) return navClick;
+
+  const imageAction = imageItemActionPlan(ctx.snapshot, intent);
+  if (imageAction) return imageAction;
+
   const cdRequest = cdRequestPlan(ctx.snapshot, intent);
   if (cdRequest) return cdRequest;
 
@@ -244,7 +250,20 @@ export function deterministicPlan(ctx: PlanContext): PlanResult | null {
 }
 
 function cdRequestPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
-  if (!matchesAny(intent, ['CD신청', 'CD배송', 'CD로배송', 'CD받', '씨디신청', '씨디배송'])) {
+  if (
+    !matchesAny(intent, [
+      'CD신청',
+      'CD배송',
+      'CD로배송',
+      'CD받',
+      'CD로받',
+      'CD로받고',
+      '씨디신청',
+      '씨디배송',
+      '씨디받',
+      '씨디로받',
+    ])
+  ) {
     return null;
   }
 
@@ -304,6 +323,226 @@ function cdRequestPlan(snapshot: DomSnapshot, intent: string): PlanResult | null
     },
     warnings: [],
   };
+}
+
+interface NavClickRule {
+  intent: string[];
+  labels: string[];
+  description: string;
+  assistantMessage: string;
+}
+
+const NAV_CLICK_RULES: NavClickRule[] = [
+  {
+    intent: ['홈으로가', '홈가줘', '홈으로이동', '홈이동', '메인으로가', '처음으로가'],
+    labels: ['홈'],
+    description: '홈 탭으로 이동합니다.',
+    assistantMessage: '홈으로 이동할게요.',
+  },
+  {
+    intent: ['영상목록으로가', '영상목록가줘', '내영상목록으로가', '내영상목록가줘', '목록으로가'],
+    labels: ['내영상목록'],
+    description: '영상 목록 탭으로 이동합니다.',
+    assistantMessage: '영상 목록으로 이동할게요.',
+  },
+  {
+    intent: ['내정보로가', '내정보가줘', '마이페이지로가', '마이페이지가줘', '설정으로가'],
+    labels: ['내정보'],
+    description: '내 정보 탭으로 이동합니다.',
+    assistantMessage: '내 정보로 이동할게요.',
+  },
+];
+
+function navClickPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
+  const rule = NAV_CLICK_RULES.find((candidate) => matchesAny(intent, candidate.intent));
+  if (!rule) return null;
+
+  const target = findElement(snapshot, rule.labels);
+  if (!target) return null;
+
+  return {
+    plan: {
+      steps: [
+        {
+          id: 's1',
+          type: 'click',
+          targetId: target.id,
+          description: rule.description,
+        },
+      ],
+      assistantMessage: rule.assistantMessage,
+      done: true,
+    },
+    warnings: [],
+  };
+}
+
+interface ImageNameRule {
+  displayName: string;
+  aliases: string[];
+}
+
+interface ImageActionRule {
+  intent: string[];
+  labels: string[];
+  description: string;
+  assistantAction: string;
+}
+
+const IMAGE_NAME_RULES: ImageNameRule[] = [
+  {
+    displayName: 'Knee (R)',
+    aliases: ['Knee', 'Knee (R)', '무릎', '무를', '오른쪽무릎', '무릎오른쪽'],
+  },
+  {
+    displayName: 'Chest',
+    aliases: ['Chest', '흉부', '가슴', '폐', '엑스레이', 'xray', 'xc'],
+  },
+  {
+    displayName: 'Brain',
+    aliases: ['Brain', '뇌', '머리', '두부'],
+  },
+  {
+    displayName: 'Spine',
+    aliases: ['Spine', '척추', '허리', '등'],
+  },
+];
+
+const IMAGE_ACTION_RULES: ImageActionRule[] = [
+  {
+    intent: ['다운로드', '다운받', '내려받'],
+    labels: ['다운로드'],
+    description: '다운로드',
+    assistantAction: '다운로드할게요',
+  },
+  {
+    intent: ['삭제', '지우'],
+    labels: ['삭제'],
+    description: '삭제',
+    assistantAction: '삭제할게요',
+  },
+  {
+    intent: ['의사에게보여', '의사한테보여', '의사공유', '의사에게보내', '의사한테보내'],
+    labels: ['의사공유'],
+    description: '의사 공유',
+    assistantAction: '의사에게 공유할게요',
+  },
+  {
+    intent: ['병원으로보내', '병원에보내', '병원전달', '전달', '보내'],
+    labels: ['병원전달'],
+    description: '병원 전달',
+    assistantAction: '병원으로 전달할게요',
+  },
+  {
+    intent: ['CD신청', 'CD배송', 'CD로배송', 'CD받', '씨디신청', '씨디배송'],
+    labels: ['CD신청'],
+    description: 'CD 신청',
+    assistantAction: 'CD 신청할게요',
+  },
+];
+
+function imageItemActionPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
+  const image = findRequestedImage(intent);
+  const action = findRequestedImageAction(intent);
+  if (!image || !action) return null;
+
+  if (!isImagesPage(snapshot)) {
+    const tab = findElement(snapshot, ['내영상목록']);
+    if (!tab) return null;
+    return {
+      plan: {
+        steps: [
+          {
+            id: 's1',
+            type: 'navigate',
+            targetId: tab.id,
+            expectedUrlPattern: '/images',
+            description: '영상 목록으로 이동합니다.',
+          },
+        ],
+        assistantMessage: `${image.displayName} 영상을 처리하기 위해 영상 목록으로 이동할게요.`,
+        done: false,
+      },
+      warnings: [],
+    };
+  }
+
+  const checkbox = findImageCheckbox(snapshot, image);
+  const actionButton = findElement(snapshot, action.labels);
+  if (!checkbox || !actionButton) return null;
+  const otherCheckedImages = findCheckedImageCheckboxes(snapshot).filter(
+    (item) => item.id !== checkbox.id,
+  );
+
+  return {
+    plan: {
+      steps: [
+        ...otherCheckedImages.map((item, index) => ({
+          id: `s${index + 1}`,
+          type: 'click' as const,
+          targetId: item.id,
+          description: `${imageCheckboxName(item)} 영상 선택 해제`,
+        })),
+        ...(checkbox.checked
+          ? []
+          : [
+              {
+                id: `s${otherCheckedImages.length + 1}`,
+                type: 'click' as const,
+                targetId: checkbox.id,
+                description: `${image.displayName} 영상 선택`,
+              },
+            ]),
+        {
+          id: `s${otherCheckedImages.length + (checkbox.checked ? 1 : 2)}`,
+          type: 'click',
+          targetId: actionButton.id,
+          description: `${action.description} 실행`,
+        },
+      ],
+      assistantMessage: `${image.displayName} 영상을 선택한 뒤 ${action.assistantAction}.`,
+      done: true,
+    },
+    warnings: [],
+  };
+}
+
+function findRequestedImage(intent: string): ImageNameRule | null {
+  return (
+    IMAGE_NAME_RULES.find((rule) =>
+      rule.aliases.some((alias) => intent.includes(normalize(alias))),
+    ) ?? null
+  );
+}
+
+function findRequestedImageAction(intent: string): ImageActionRule | null {
+  return IMAGE_ACTION_RULES.find((rule) => matchesAny(intent, rule.intent)) ?? null;
+}
+
+function findImageCheckbox(snapshot: DomSnapshot, image: ImageNameRule): InteractiveElement | null {
+  const aliases = image.aliases.map(normalize);
+  return (
+    allElements(snapshot).find((item) => {
+      if (!item.visibleNow) return false;
+      if (item.tag !== 'input') return false;
+      const label = normalize(item.label);
+      return aliases.some((alias) => label.includes(alias));
+    }) ?? null
+  );
+}
+
+function findCheckedImageCheckboxes(snapshot: DomSnapshot): InteractiveElement[] {
+  return allElements(snapshot).filter((item) => {
+    if (!item.visibleNow || item.tag !== 'input' || !item.checked) return false;
+    const label = normalize(item.label);
+    return IMAGE_NAME_RULES.some((rule) =>
+      rule.aliases.some((alias) => label.includes(normalize(alias))),
+    );
+  });
+}
+
+function imageCheckboxName(item: InteractiveElement): string {
+  return item.label.replace(/\s*선택\s*$/, '').trim() || '기존';
 }
 
 function explicitInteractionPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
@@ -380,7 +619,7 @@ const DIRECT_RULES: DirectRule[] = [
     assistantMessage: '의사에게 영상을 보여주려면 이 메뉴에서 시작하세요.',
   },
   {
-    intent: ['CD로배송', 'CD배송', 'CD받', 'CD신청', '씨디'],
+    intent: ['CD로배송', 'CD배송', 'CD받', 'CD로받', 'CD신청', '씨디'],
     labels: ['내영상CD로배송받기', 'CD신청'],
     highlightDescription: 'CD 신청 시작 위치',
     explainDescription: '이 메뉴에서 영상 CD 배송을 신청할 수 있습니다.',

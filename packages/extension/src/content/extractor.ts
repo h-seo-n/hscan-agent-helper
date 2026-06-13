@@ -127,6 +127,9 @@ function buildElement(
   const groupLabel = getGroupLabel(el);
   const visibleNow = isInViewport(rect, win);
   const href = el.getAttribute('href') ?? undefined;
+  const input = tag === 'input' ? (el as HTMLInputElement) : null;
+  const checked =
+    input && ['checkbox', 'radio'].includes(input.type) ? input.checked : undefined;
 
   const elem: InteractiveElement = {
     id,
@@ -140,6 +143,7 @@ function buildElement(
   };
   if (groupLabel) elem.groupLabel = groupLabel;
   if (href) elem.href = href;
+  if (checked !== undefined) elem.checked = checked;
   return elem;
 }
 
@@ -199,6 +203,16 @@ function getLabel(el: HTMLElement, doc: Document): string {
   return name?.trim() ?? '';
 
 }
+
+const getRect = (el) => {
+  const r = el.getBoundingClientRect();
+  return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
+};
+
+const getRect = (el) => {
+  const r = el.getBoundingClientRect();
+  return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
+};
 
 const getRect = (el) => {
   const r = el.getBoundingClientRect();

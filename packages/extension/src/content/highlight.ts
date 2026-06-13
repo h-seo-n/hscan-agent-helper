@@ -33,28 +33,58 @@ function ensureHost(): OverlayState {
 
   const style = document.createElement('style');
   style.textContent = `
+    :host {
+      --aiwa-blue: #1d4ed8;
+      --aiwa-blue-strong: #1e40af;
+      --aiwa-ring: rgba(37, 99, 235, 0.30);
+      --aiwa-ring-soft: rgba(37, 99, 235, 0.16);
+      --aiwa-shadow: rgba(15, 23, 42, 0.22);
+    }
     .box {
       position: fixed;
-      border: 2px solid #2563eb;
-      border-radius: 8px;
-      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18);
+      border: 3px solid var(--aiwa-blue);
+      border-radius: 10px;
+      box-shadow:
+        0 0 0 4px var(--aiwa-ring-soft),
+        0 10px 24px var(--aiwa-shadow),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.85);
       pointer-events: none;
       transition: top 0.12s, left 0.12s, width 0.12s, height 0.12s;
       animation: pulse 1.4s ease-in-out infinite;
     }
     .caption {
       position: fixed;
-      background: #2563eb;
+      box-sizing: border-box;
+      background: var(--aiwa-blue-strong);
       color: white;
-      font: 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      padding: 4px 8px;
-      border-radius: 6px;
+      font: 600 13px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      letter-spacing: 0;
+      padding: 7px 10px;
+      border-radius: 8px;
+      box-shadow: 0 8px 18px var(--aiwa-shadow);
       pointer-events: none;
-      max-width: 240px;
+      max-width: min(280px, calc(100vw - 16px));
+      overflow-wrap: anywhere;
     }
     @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18); }
-      50%      { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.32); }
+      0%, 100% {
+        box-shadow:
+          0 0 0 4px var(--aiwa-ring-soft),
+          0 10px 24px var(--aiwa-shadow),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.85);
+      }
+      50% {
+        box-shadow:
+          0 0 0 8px var(--aiwa-ring),
+          0 10px 24px var(--aiwa-shadow),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.85);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .box {
+        animation: none;
+        transition: none;
+      }
     }
   `;
   shadow.appendChild(style);

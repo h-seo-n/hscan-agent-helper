@@ -20,6 +20,7 @@ import {
 const SNAPSHOT_TIMEOUT_MS = 5000;
 const PAGE_READY_TIMEOUT_MS = 5000;
 const CONTENT_SCRIPT_RETRY_DELAYS_MS = [100, 250, 500];
+const ACTIVE_ORIGINS_STORAGE_KEY = 'hscan.activeOrigins';
 
 const sessionsByTab = new Map<number, PlanSession>();
 const pageReadyTimers = new Map<number, ReturnType<typeof setTimeout>>();
@@ -70,6 +71,19 @@ async function handleUserInput(
     return {
       kind: 'assistant-reply',
       message: makeAssistantMessage('활성 탭을 찾지 못했어요.'),
+    };
+  }
+  const origin = tab.url ? toHttpOrigin(tab.url) : null;
+  if (!origin) {
+    return {
+      kind: 'assistant-reply',
+      message: makeAssistantMessage('현재 탭에서는 Hscan Assistant를 사용할 수 없어요.'),
+    };
+  }
+  if (!(await isOriginActive(origin))) {
+    return {
+      kind: 'assistant-reply',
+      message: makeAssistantMessage(`먼저 사이드바 상단에서 ${origin} 활성화를 켜주세요.`),
     };
   }
 
@@ -293,6 +307,34 @@ async function getTabUrl(tabId: number): Promise<string | undefined> {
     return tab.url;
   } catch {
     return undefined;
+  }
+}
+
+async function isOriginActive(origin: string): Promise<boolean> {
+  const values = await chrome.storage.local.get(ACTIVE_ORIGINS_STORAGE_KEY);
+  const origins = normalizeOrigins(values[ACTIVE_ORIGINS_STORAGE_KEY]);
+  return origins.includes(origin);
+}
+
+function normalizeOrigins(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value.filter((origin): origin is string => {
+        if (typeof origin !== 'string') return false;
+        return toHttpOrigin(origin) === origin;
+      }),
+    ),
+  );
+}
+
+function toHttpOrigin(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.origin;
+  } catch {
+    return null;
   }
 }
 

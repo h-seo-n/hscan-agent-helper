@@ -4,6 +4,14 @@ import { sendRuntimeMessage } from '../shared/sendMessage';
 import { MessageList } from './components/MessageList';
 import { MessageInput } from './components/MessageInput';
 import { ProgressPanel } from './components/ProgressPanel';
+import { ActivationToggle } from './components/ActivationToggle';
+
+const SUGGESTED_PROMPTS = [
+  '내 영상 병원에서 받기',
+  '내 영상 다운로드 받고 싶어',
+  '영상 검색창 보여줘',
+  '내 영상 CD로 배송 받고 싶어',
+];
 
 export function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -65,9 +73,16 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="app__header">Hscan</header>
+      <header className="app__header">
+        <ActivationToggle />
+      </header>
       <ProgressPanel session={session} onCancel={handleCancel} />
-      <MessageList messages={messages} pending={pending} />
+      <MessageList
+        messages={messages}
+        pending={pending}
+        examples={SUGGESTED_PROMPTS}
+        onSelectExample={handleSend}
+      />
       <MessageInput disabled={pending && session?.state !== 'done'} onSend={handleSend} />
     </div>
   );
