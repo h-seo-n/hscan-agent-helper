@@ -204,17 +204,7 @@ function getLabel(el: HTMLElement, doc: Document): string {
 
 }
 
-const getRect = (el) => {
-  const r = el.getBoundingClientRect();
-  return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
-};
-
-const getRect = (el) => {
-  const r = el.getBoundingClientRect();
-  return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
-};
-
-const getRect = (el) => {
+const getRect = (el: any) => {
   const r = el.getBoundingClientRect();
   return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
 };

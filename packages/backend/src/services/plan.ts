@@ -4,7 +4,6 @@ import {
   type DomSnapshot,
   type InteractiveElement,
   type PlanContext,
-  type InteractiveElement,
   type RegionName,
   zActionPlan,
 } from '@hscan/shared-types';
@@ -29,19 +28,31 @@ Hard rules:
    link whose label most directly matches the user's intent. If the user says "다운로드" and
    the home page has cards like "CD로 배송 받기" (loose match) and a tab "내 영상 목록" (which
    leads to a list page where there is a literal "다운로드" button), prefer the tab.
-4. Treat a visible interactive card/button with a label that directly matches the intent as an
+4. HScan task taxonomy:
+   - "의사에게 보여주기" for a non-partner hospital doctor = "내 영상 의사에게 보여주기".
+   - "CD로 발급", "CD 신청", or generic "발급 받고 싶어" = CD issue/request flow.
+   - "병원에서 받기", "제휴 병원 영상 가져오기", or "내 계정으로 가져오기" = "내 영상 병원에서 받기".
+   - "병원에서 받아서 바로 CD로 발급" = "내 영상 병원에서 받기" plus CD option if available.
+   - "병원으로 보내기", "다른 병원으로 보내기", or "전달" = "내 영상 병원으로 보내기".
+   - "병원에서 받아서 바로 보내기" = "내 영상 병원에서 받기" plus send option if available.
+   - "영상 목록 조회" = "내 영상 목록".
+   - "영상 다운로드" or "다운로드 받고 싶어" = go to "내 영상 목록" and use the "다운로드" action.
+   Never treat a download request as a receive/CD-issue request just because it contains "받고 싶어".
+   Also keep "발급/CD" distinct from "다운로드": issuing creates/provides CD/request output,
+   downloading saves an already registered image from the image list.
+5. Treat a visible interactive card/button with a label that directly matches the intent as an
    entry point on the current page. For Korean receive requests such as "내 영상 받고 싶어",
    "영상 받기", or "병원 영상 받고 싶어", a card labeled "내 영상 병원에서 받기" is a direct
    match when present. Highlight that card instead of asking the user to clarify.
-5. After arriving on the page that contains the actual entry point for the user's task, produce
+6. After arriving on the page that contains the actual entry point for the user's task, produce
    a short plan: at minimum one highlight on the entry point and one explain telling the user
    what to do there. Set done=true.
-6. Use executedSteps to understand what already happened on previous pages. Do not re-run a
+7. Use executedSteps to understand what already happened on previous pages. Do not re-run a
    navigation that already succeeded. If executedSteps shows you already navigated and the user
    is now on the destination page, focus on highlighting the entry point.
-6. assistantMessage must be in the user's language (Korean here) and concise (one sentence).
-7. Each step must have a unique short "id" string (e.g. "s1", "s2").
-8. If all elements have region "unknown" (no semantic HTML landmarks), the page uses
+8. assistantMessage must be in the user's language (Korean here) and concise (one sentence).
+9. Each step must have a unique short "id" string (e.g. "s1", "s2").
+10. If all elements have region "unknown" (no semantic HTML landmarks), the page uses
    div-only layout. In this case, infer purpose from:
    - "label": the element's visible text (e.g. "홈", "내 영상 목록", "내 정보" → nav tabs)
    - "visibleNow": prefer true elements as they are in the current viewport
@@ -209,6 +220,11 @@ export function deterministicPlan(ctx: PlanContext): PlanResult | null {
   const imageAction = imageItemActionPlan(ctx.snapshot, intent);
   if (imageAction) return imageAction;
 
+  if (needsImageListOnlyPage(intent) && !isImagesPage(ctx.snapshot)) {
+    const imagesPage = navigateToImagesPagePlan(ctx.snapshot, '영상 목록 페이지로 이동할게요.');
+    if (imagesPage) return imagesPage;
+  }
+
   const cdRequest = cdRequestPlan(ctx.snapshot, intent);
   if (cdRequest) return cdRequest;
 
@@ -225,25 +241,8 @@ export function deterministicPlan(ctx: PlanContext): PlanResult | null {
     matchesAny(intent, ['다운로드', '삭제', '검색', '영상검색', '목록', '리스트']) ||
     matchesAny(intent, ['의사공유', '공유', '병원전달', '전달']);
   if (needsImagesPage && !isImagesPage(ctx.snapshot)) {
-    const tab = findElement(ctx.snapshot, ['내영상목록']);
-    if (tab) {
-      return {
-        plan: {
-          steps: [
-            {
-              id: 's1',
-              type: 'navigate',
-              targetId: tab.id,
-              expectedUrlPattern: '/images',
-              description: '영상 목록으로 이동합니다.',
-            },
-          ],
-          assistantMessage: '영상 목록 페이지로 이동할게요.',
-          done: false,
-        },
-        warnings: [],
-      };
-    }
+    const imagesPage = navigateToImagesPagePlan(ctx.snapshot, '영상 목록 페이지로 이동할게요.');
+    if (imagesPage) return imagesPage;
   }
 
   return null;
@@ -262,6 +261,9 @@ function cdRequestPlan(snapshot: DomSnapshot, intent: string): PlanResult | null
       '씨디배송',
       '씨디받',
       '씨디로받',
+      '발급',
+      '발급받',
+      '발급신청',
     ])
   ) {
     return null;
@@ -319,6 +321,44 @@ function cdRequestPlan(snapshot: DomSnapshot, intent: string): PlanResult | null
         },
       ],
       assistantMessage: 'CD 배송 신청 페이지로 이동할게요.',
+      done: false,
+    },
+    warnings: [],
+  };
+}
+
+function needsImageListOnlyPage(intent: string): boolean {
+  return matchesAny(intent, [
+    '다운로드',
+    '다운받',
+    '내려받',
+    '삭제',
+    '지우',
+    '검색',
+    '영상검색',
+    '목록',
+    '리스트',
+  ]);
+}
+
+function navigateToImagesPagePlan(
+  snapshot: DomSnapshot,
+  assistantMessage: string,
+): PlanResult | null {
+  const tab = findElement(snapshot, ['내영상목록']);
+  if (!tab) return null;
+  return {
+    plan: {
+      steps: [
+        {
+          id: 's1',
+          type: 'navigate',
+          targetId: tab.id,
+          expectedUrlPattern: '/images',
+          description: '영상 목록으로 이동합니다.',
+        },
+      ],
+      assistantMessage,
       done: false,
     },
     warnings: [],

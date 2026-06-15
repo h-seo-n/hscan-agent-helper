@@ -278,6 +278,30 @@ describe('deterministicPlan', () => {
     expect(result?.plan.done).toBe(false);
   });
 
+  it.each(['내 영상 다운로드 받고 싶어', '다운로드 받고 싶어', '발급된 영상 다운로드 받고 싶어'])(
+    'treats "%s" as download, not hospital receive',
+    (message) => {
+      const result = deterministicPlan(makeContext(message, homeSnapshot()));
+
+      expect(result?.plan.steps[0]).toMatchObject({
+        type: 'navigate',
+        targetId: 'tid:tab-images',
+        expectedUrlPattern: '/images',
+      });
+      expect(result?.plan.done).toBe(false);
+    },
+  );
+
+  it('highlights download on the image list even when the request says "받고 싶어"', () => {
+    const result = deterministicPlan(makeContext('내 영상 다운로드 받고 싶어', imagesSnapshot()));
+
+    expect(result?.plan.steps[0]).toMatchObject({
+      type: 'highlight',
+      targetId: 'btn-download',
+    });
+    expect(result?.plan.done).toBe(true);
+  });
+
   it('navigates to images page before handling named image actions from home', () => {
     const result = deterministicPlan(makeContext('무릎 영상 다운로드해줘', homeSnapshot()));
 
@@ -370,6 +394,20 @@ describe('deterministicPlan', () => {
     });
     expect(result?.plan.done).toBe(false);
   });
+
+  it.each(['발급 받고 싶어', '내 영상 CD로 발급받고 싶어'])(
+    'treats "%s" as a CD issue request, not download or hospital receive',
+    (message) => {
+      const result = deterministicPlan(makeContext(message, homeSnapshot()));
+
+      expect(result?.plan.steps[0]).toMatchObject({
+        type: 'navigate',
+        targetId: 'id:card-cd',
+        expectedUrlPattern: '/cd-request',
+      });
+      expect(result?.plan.done).toBe(false);
+    },
+  );
 
   it('highlights the first CD request input after arriving on the CD request page', () => {
     const result = deterministicPlan(makeContext('CD 신청하고 싶어', cdRequestSnapshot()));

@@ -47,11 +47,15 @@ export function App() {
 
     try {
       // Background acknowledges immediately; final assistant text arrives via plan flow.
-      await sendRuntimeMessage<ExtensionMessage>({
+      const reply = await sendRuntimeMessage<ExtensionMessage>({
         kind: 'user-input',
         message: userMsg,
         history: messages,
       });
+      if (reply.kind === 'assistant-reply' && reply.message.content !== '…') {
+        setMessages((prev) => [...prev, reply.message]);
+        setPending(false);
+      }
     } catch (err) {
       const fallback: ChatMessage = {
         id: crypto.randomUUID(),
