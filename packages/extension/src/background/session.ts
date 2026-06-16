@@ -23,6 +23,8 @@ export interface PlanSession {
   errorMessage?: string;
   retries: number;
   pendingPageReady: boolean;
+  pageChangeSeq: number;
+  lastUserActivityAt: number;
 }
 
 export function createSession(args: {
@@ -43,6 +45,8 @@ export function createSession(args: {
     lastSnapshot: null,
     retries: 0,
     pendingPageReady: false,
+    pageChangeSeq: 0,
+    lastUserActivityAt: 0,
   };
 }
 
@@ -84,6 +88,8 @@ export function currentStep(session: PlanSession): ActionStep | null {
 export type Transition =
   | { kind: 'execute-next-step' }
   | { kind: 'await-page-ready' }
+  | { kind: 'fetch-snapshot' }
+  | { kind: 'wait-for-user' }
   | { kind: 'replan' }
   | { kind: 'finish-done' }
   | { kind: 'finish-failed'; reason: string };
@@ -106,8 +112,8 @@ export function applyStepResult(
 
   if (status === 'waiting-user') {
     session.currentStepIndex += 1;
-    session.state = 'done';
-    return { kind: 'finish-done' };
+    session.state = 'waiting-user';
+    return { kind: 'wait-for-user' };
   }
   if (status === 'navigated') {
     session.state = 'awaiting-page-ready';
@@ -131,12 +137,23 @@ export function applyStepResult(
       session.state = 'done';
       return { kind: 'finish-done' };
     }
-    // plan exhausted but not marked done — replan with current snapshot.
-    session.state = 'calling-plan';
-    return { kind: 'replan' };
+    if (isPassivePlan(session.currentPlan)) {
+      session.state = 'waiting-user';
+      return { kind: 'wait-for-user' };
+    }
+    // plan exhausted but the scenario is not complete. Re-read the page before asking
+    // the planner for the next milestone, because the last step may have changed the UI.
+    session.state = 'fetching-snapshot';
+    return { kind: 'fetch-snapshot' };
   }
   session.state = 'executing-step';
   return { kind: 'execute-next-step' };
+}
+
+function isPassivePlan(plan: ActionPlan): boolean {
+  return plan.steps.every((step) =>
+    step.type === 'highlight' || step.type === 'explain' || step.type === 'scroll',
+  );
 }
 
 // 새로 받은 ActionPlan을 세션에 장착
@@ -146,8 +163,13 @@ export function loadPlan(session: PlanSession, plan: ActionPlan): Transition {
   session.retries = 0;
 
   if (plan.steps.length === 0) {
-    session.state = 'done';
-    return { kind: 'finish-done' };
+    if (plan.done) {
+      session.state = 'done';
+      return { kind: 'finish-done' };
+    }
+    session.state = 'failed';
+    session.errorMessage = 'planner returned no executable steps before the scenario was complete';
+    return { kind: 'finish-failed', reason: session.errorMessage };
   }
   session.state = 'executing-step';
   return { kind: 'execute-next-step' };

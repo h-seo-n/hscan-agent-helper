@@ -22,8 +22,7 @@ export function App() {
     const listener = (msg: ExtensionMessage) => {
       if (msg.kind === 'plan-update') {
         setSession(msg.session);
-        const terminal = msg.session.state === 'done' || msg.session.state === 'failed';
-        if (terminal) setPending(false);
+        if (canAcceptUserInput(msg.session)) setPending(false);
       } else if (msg.kind === 'assistant-reply') {
         // Background may push assistant messages outside the user-input response cycle.
         if (msg.message.content && msg.message.content !== '…') {
@@ -87,7 +86,15 @@ export function App() {
         examples={SUGGESTED_PROMPTS}
         onSelectExample={handleSend}
       />
-      <MessageInput disabled={pending && session?.state !== 'done'} onSend={handleSend} />
+      <MessageInput disabled={pending && !canAcceptUserInput(session)} onSend={handleSend} />
     </div>
+  );
+}
+
+function canAcceptUserInput(session: PlanSessionView | null): boolean {
+  return (
+    session?.state === 'done' ||
+    session?.state === 'failed' ||
+    session?.state === 'waiting-user'
   );
 }

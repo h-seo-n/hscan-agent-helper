@@ -22,6 +22,10 @@ export const zInteractiveElement = z.object({
   groupLabel: z.string().optional(),
   visibleNow: z.boolean(),
   href: z.string().optional(),
+  status: z.string().optional(),
+  context: z.string().optional(),
+  disabled: z.boolean().optional(),
+  filled: z.boolean().optional(),
   checked: z.boolean().optional(),
   boundingRect: zBoundingRect.optional(),
 });
@@ -31,6 +35,7 @@ export const zDomSnapshot = z.object({
   url: z.string(),
   title: z.string(),
   capturedAt: z.number(),
+  textBlocks: z.array(z.string()).optional(),
   regions: z.record(zRegionName, z.array(zInteractiveElement)),
 });
 export type DomSnapshot = z.infer<typeof zDomSnapshot>;
@@ -118,6 +123,7 @@ export const PLAN_SESSION_STATES = [
   'calling-plan',
   'executing-step',
   'awaiting-page-ready',
+  'waiting-user',
   'done',
   'failed',
 ] as const;
@@ -166,6 +172,17 @@ export const zExtensionMessage = z.discriminatedUnion('kind', [
     kind: z.literal('page-ready'),
     url: z.string(),
     title: z.string(),
+  }),
+  z.object({
+    kind: z.literal('user-activity'),
+    url: z.string(),
+    title: z.string(),
+  }),
+  z.object({
+    kind: z.literal('page-changed'),
+    url: z.string(),
+    title: z.string(),
+    userInitiated: z.boolean().optional(),
   }),
   z.object({
     kind: z.literal('plan-update'),

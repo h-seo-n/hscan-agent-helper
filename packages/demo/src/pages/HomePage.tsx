@@ -24,7 +24,7 @@ const CARDS: Card[] = [
     id: 'card-receive',
     title: '내 영상 병원에서 받기',
     description: '진료받은 병원의 영상을 내 계정으로 가져옵니다.',
-    to: '/images',
+    to: '/receive',
   },
   {
     id: 'card-send',

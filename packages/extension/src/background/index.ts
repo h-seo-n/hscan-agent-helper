@@ -19,11 +19,15 @@ import {
 
 const SNAPSHOT_TIMEOUT_MS = 5000;
 const PAGE_READY_TIMEOUT_MS = 5000;
+const USER_ACTIVITY_RESUME_DELAY_MS = 350;
+const PAGE_CHANGE_RESUME_DELAY_MS = 500;
+const USER_INITIATED_PAGE_CHANGE_WINDOW_MS = 8000;
 const CONTENT_SCRIPT_RETRY_DELAYS_MS = [100, 250, 500];
 const ACTIVE_ORIGINS_STORAGE_KEY = 'hscan.activeOrigins';
 
 const sessionsByTab = new Map<number, PlanSession>();
 const pageReadyTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const pageChangeTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
 function cleanupHighlight(tabId: number) {
   sendToContent(tabId, { kind: 'hide-highlight' }).catch(() => undefined);
@@ -51,6 +55,16 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
 
   if (message.kind === 'page-ready') {
     handlePageReady(sender.tab?.id, message.url, message.title);
+    return false;
+  }
+
+  if (message.kind === 'user-activity') {
+    handleUserActivity(sender.tab?.id);
+    return false;
+  }
+
+  if (message.kind === 'page-changed') {
+    handlePageChanged(sender.tab?.id, message.userInitiated === true);
     return false;
   }
 
@@ -88,6 +102,7 @@ async function handleUserInput(
   }
 
   const existing = sessionsByTab.get(tab.id);
+  cleanupHighlight(tab.id);
   const session =
     existing && existing.state !== 'failed' && existing.state !== 'done'
       ? continueSession(existing, userMessage, history)
@@ -133,6 +148,7 @@ function continueSession(
   session.currentStepIndex = 0;
   session.retries = 0;
   session.pendingPageReady = false;
+  session.pageChangeSeq += 1;
   session.originalUserMessage = userMessage.content;
   return session;
 }
@@ -173,7 +189,13 @@ async function runLoop(session: PlanSession): Promise<void> {
         broadcast(session);
         return;
       }
+      const pageChangeSeqAtCallStart = session.pageChangeSeq;
       const planResult = await callPlan(buildPlanContext(session, session.lastSnapshot));
+      if (session.pageChangeSeq !== pageChangeSeqAtCallStart) {
+        session.state = 'fetching-snapshot';
+        broadcast(session);
+        continue;
+      }
       if (!planResult) {
         cleanupHighlight(session.tabId);
         session.state = 'failed';
@@ -188,13 +210,20 @@ async function runLoop(session: PlanSession): Promise<void> {
         await postAssistantMessage(planResult.assistantMessage);
       }
       broadcast(session);
-      if (transition.kind === 'finish-done') return;
+      if (transition.kind === 'finish-done') {
+        cleanupHighlight(session.tabId);
+        return;
+      }
+      if (transition.kind === 'finish-failed') {
+        cleanupHighlight(session.tabId);
+        return;
+      }
     }
 
     if (session.state === 'executing-step') {
       const step = currentStep(session);
       if (!step) {
-        cleanupHighlight(session.tabId)
+        cleanupHighlight(session.tabId);
         session.state = 'done';
         broadcast(session);
         return;
@@ -210,7 +239,10 @@ async function runLoop(session: PlanSession): Promise<void> {
       const url = (await getTabUrl(session.tabId)) ?? '';
       const transition = applyStepResult(session, result.stepId, result.status, url, result.reason);
       broadcast(session);
-      if (transition.kind === 'finish-done') return;
+      if (transition.kind === 'finish-done') {
+        cleanupHighlight(session.tabId);
+        return;
+      }
       if (transition.kind === 'finish-failed') {
         cleanupHighlight(session.tabId);
         await postAssistantMessage(`작업 실패: ${transition.reason}`);
@@ -228,6 +260,13 @@ async function runLoop(session: PlanSession): Promise<void> {
         armPageReadyTimeout(session);
         return;
       }
+      if (transition.kind === 'fetch-snapshot') {
+        await delay(150);
+        continue;
+      }
+      if (transition.kind === 'wait-for-user') {
+        return;
+      }
       // execute-next-step or replan: continue the loop
     }
 
@@ -239,6 +278,20 @@ function handlePageReady(tabId: number | undefined, _url: string, _title: string
   if (!tabId) return;
   const session = sessionsByTab.get(tabId);
   if (!session) return;
+
+  if (session.state === 'waiting-user') {
+    session.pendingPageReady = false;
+    session.state = 'fetching-snapshot';
+    broadcast(session);
+    runLoop(session).catch((err) => {
+      console.error('[bg] post user-navigation loop failed', err);
+      cleanupHighlight(session.tabId);
+      session.state = 'failed';
+      session.errorMessage = err instanceof Error ? err.message : 'unknown';
+      broadcast(session);
+    });
+    return;
+  }
 
   // page-ready can race ahead of the navigate step's step-result. 
   // If we're not yet in awaiting-page-ready, buffer the signal so runLoop consumes it as soon as the navigate transition completes.
@@ -263,6 +316,54 @@ function handlePageReady(tabId: number | undefined, _url: string, _title: string
     session.errorMessage = err instanceof Error ? err.message : 'unknown';
     broadcast(session);
   });
+}
+
+function handleUserActivity(tabId: number | undefined) {
+  if (!tabId) return;
+  const session = sessionsByTab.get(tabId);
+  if (!session) return;
+
+  session.lastUserActivityAt = Date.now();
+  if (session.state !== 'waiting-user') return;
+  scheduleSnapshotRefresh(session, USER_ACTIVITY_RESUME_DELAY_MS, 'post user-activity');
+}
+
+function handlePageChanged(tabId: number | undefined, userInitiated: boolean) {
+  if (!tabId) return;
+  const session = sessionsByTab.get(tabId);
+  if (!session || session.state === 'done' || session.state === 'failed') return;
+  if (!userInitiated && !hasRecentUserActivity(session)) return;
+
+  session.pageChangeSeq += 1;
+  if (session.state !== 'waiting-user') return;
+
+  scheduleSnapshotRefresh(session, PAGE_CHANGE_RESUME_DELAY_MS, 'post page-change');
+}
+
+function scheduleSnapshotRefresh(session: PlanSession, delayMs: number, logLabel: string) {
+  const existing = pageChangeTimers.get(session.tabId);
+  if (existing) clearTimeout(existing);
+
+  session.pendingPageReady = false;
+  session.state = 'fetching-snapshot';
+  broadcast(session);
+
+  const timer = setTimeout(() => {
+    pageChangeTimers.delete(session.tabId);
+    if (session.state !== 'fetching-snapshot') return;
+    runLoop(session).catch((err) => {
+      console.error(`[bg] ${logLabel} loop failed`, err);
+      cleanupHighlight(session.tabId);
+      session.state = 'failed';
+      session.errorMessage = err instanceof Error ? err.message : 'unknown';
+      broadcast(session);
+    });
+  }, delayMs);
+  pageChangeTimers.set(session.tabId, timer);
+}
+
+function hasRecentUserActivity(session: PlanSession): boolean {
+  return Date.now() - session.lastUserActivityAt <= USER_INITIATED_PAGE_CHANGE_WINDOW_MS;
 }
 
 function armPageReadyTimeout(session: PlanSession) {
@@ -291,6 +392,11 @@ function cancelSession(sessionId: string) {
     if (t) {
       clearTimeout(t);
       pageReadyTimers.delete(tabId);
+    }
+    const pageChangeTimer = pageChangeTimers.get(tabId);
+    if (pageChangeTimer) {
+      clearTimeout(pageChangeTimer);
+      pageChangeTimers.delete(tabId);
     }
     broadcast(session);
   }

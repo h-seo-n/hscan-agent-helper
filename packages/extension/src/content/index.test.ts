@@ -128,4 +128,71 @@ describe('executeStep', () => {
     await expect(result).resolves.toEqual({ status: 'navigated' });
     expect(click).toHaveBeenCalledTimes(1);
   });
+
+  it('waits for DOM mutations to become idle before snapshot extraction can proceed', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) =>
+      window.setTimeout(() => callback(performance.now()), 16),
+    );
+    const { waitForDomSettled } = await import('./index');
+
+    let settled = false;
+    const result = waitForDomSettled(50, 500).then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(32);
+    expect(settled).toBe(false);
+
+    document.body.setAttribute('data-loading-state', 'loading');
+    await vi.advanceTimersByTimeAsync(49);
+    expect(settled).toBe(false);
+
+    document.body.setAttribute('data-loading-state', 'ready');
+    await vi.advanceTimersByTimeAsync(49);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(32);
+    await result;
+    expect(settled).toBe(true);
+  });
+
+  it('announces meaningful page changes after DOM settles', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) =>
+      window.setTimeout(() => callback(performance.now()), 16),
+    );
+    document.body.innerHTML = '<main><button>CD신청</button></main>';
+    await import('./index');
+    const sendMessage = vi.mocked(chrome.runtime.sendMessage);
+    await vi.advanceTimersByTimeAsync(2000);
+    sendMessage.mockClear();
+
+    document.querySelector('button')?.setAttribute('data-aiwa-id', 'auto:test-1');
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'page-changed' }),
+    );
+
+    document.body.innerHTML = `
+      <main>
+        <h1>신청 항목과 결제 금액을 확인해 주세요</h1>
+        <button>배송지 입력하기</button>
+      </main>
+    `;
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(450);
+    await vi.advanceTimersByTimeAsync(32);
+    await vi.advanceTimersByTimeAsync(250);
+    await vi.advanceTimersByTimeAsync(32);
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'page-changed',
+        userInitiated: false,
+      }),
+    );
+  });
 });

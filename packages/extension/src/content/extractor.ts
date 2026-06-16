@@ -6,15 +6,24 @@ const INTERACTIVE_SELECTOR = [
   'input',
   'textarea',
   'select',
+  '[onclick]',
+  '[tabindex]:not([tabindex="-1"])',
   '[role="button"]',
   '[role="link"]',
   '[role="menuitem"]',
   '[role="tab"]',
+  '[role="status"]',
+  '[role="alert"]',
+  '[data-aiwa-status]',
+  '.cursor-pointer',
   '[contenteditable="true"]',
 ].join(',');
 
 const ID_ATTR = 'data-aiwa-id';
 const MAX_LABEL = 80;
+const MAX_CONTEXT = 240;
+const MAX_TEXT_BLOCK = 160;
+const MAX_TEXT_BLOCKS = 40;
 
 export interface ExtractOptions {
   doc?: Document;
@@ -47,13 +56,13 @@ export function extractSnapshot(opts: ExtractOptions = {}): DomSnapshot {
     url: win.location.href,
     title: doc.title,
     capturedAt: Date.now(),
+    textBlocks: extractTextBlocks(doc, win),
     regions,
   };
 }
 
 function isCandidate(el: HTMLElement, win: Window): boolean {
   if ((el as HTMLInputElement).type === 'password') return false;
-  if ((el as HTMLButtonElement).disabled) return false;
   if (el.getAttribute('aria-hidden') === 'true') return false;
 
   const rect = el.getBoundingClientRect();
@@ -127,9 +136,19 @@ function buildElement(
   const groupLabel = getGroupLabel(el);
   const visibleNow = isInViewport(rect, win);
   const href = el.getAttribute('href') ?? undefined;
+  const status = el.getAttribute('data-aiwa-status') ?? undefined;
+  const disabled = isDisabled(el);
+  const context = getContext(el);
   const input = tag === 'input' ? (el as HTMLInputElement) : null;
+  const textarea = tag === 'textarea' ? (el as HTMLTextAreaElement) : null;
   const checked =
     input && ['checkbox', 'radio'].includes(input.type) ? input.checked : undefined;
+  const filled =
+    input && !['checkbox', 'radio', 'button', 'submit', 'reset'].includes(input.type)
+      ? input.value.trim().length > 0
+      : textarea
+        ? textarea.value.trim().length > 0
+        : undefined;
 
   const elem: InteractiveElement = {
     id,
@@ -143,8 +162,18 @@ function buildElement(
   };
   if (groupLabel) elem.groupLabel = groupLabel;
   if (href) elem.href = href;
+  if (status) elem.status = status;
+  if (context) elem.context = context;
+  if (disabled) elem.disabled = true;
+  if (filled !== undefined) elem.filled = filled;
   if (checked !== undefined) elem.checked = checked;
   return elem;
+}
+
+function isDisabled(el: HTMLElement): boolean {
+  if (el.getAttribute('aria-disabled') === 'true') return true;
+  if ('disabled' in el) return Boolean((el as HTMLButtonElement).disabled);
+  return false;
 }
 
 function getLabel(el: HTMLElement, doc: Document): string {
@@ -203,11 +232,6 @@ function getLabel(el: HTMLElement, doc: Document): string {
   return name?.trim() ?? '';
 
 }
-
-const getRect = (el: any) => {
-  const r = el.getBoundingClientRect();
-  return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
-};
 
 const SEMANTIC_REGION: Record<string, RegionName> = {
   header: 'header',
@@ -318,12 +342,118 @@ function cssEscape(s: string): string {
   return s.replace(/["\\]/g, '\\$&');
 }
 
+function getContext(el: HTMLElement): string | undefined {
+  const own = normalizeText(el.textContent ?? '');
+  let fallback = '';
+  let cur = el.parentElement;
+
+  while (cur && cur !== cur.ownerDocument.body) {
+    const text = normalizeText(cur.textContent ?? '');
+    if (text && text !== own) {
+      if (text.length <= MAX_CONTEXT) return text;
+      if (!fallback) fallback = text.slice(0, MAX_CONTEXT);
+    }
+    cur = cur.parentElement;
+  }
+
+  return fallback || undefined;
+}
+
+function extractTextBlocks(doc: Document, win: Window): string[] {
+  const root = doc.body;
+  if (!root) return [];
+
+  const blocks: string[] = [];
+  const seen = new Set<string>();
+  const addBlock = (value: string) => {
+    const text = normalizeText(value).slice(0, MAX_TEXT_BLOCK);
+    if (text && !seen.has(text)) {
+      seen.add(text);
+      blocks.push(text);
+    }
+  };
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const text = normalizeText(node.textContent ?? '');
+      if (text.length < 2) return NodeFilter.FILTER_REJECT;
+      const parent = node.parentElement;
+      if (!parent || !isVisibleTextParent(parent, win)) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  let node = walker.nextNode();
+  while (node && blocks.length < MAX_TEXT_BLOCKS) {
+    addBlock(node.textContent ?? '');
+    node = walker.nextNode();
+  }
+
+  for (const pinBlock of extractPinCodeTextBlocks(doc, win)) {
+    if (blocks.length >= MAX_TEXT_BLOCKS) break;
+    addBlock(pinBlock);
+  }
+
+  return blocks;
+}
+
+function extractPinCodeTextBlocks(doc: Document, win: Window): string[] {
+  const out: string[] = [];
+  const candidates = Array.from(doc.querySelectorAll<HTMLElement>('div,section,article'));
+  for (const el of candidates) {
+    if (!isVisibleTextParent(el, win)) continue;
+    if (!hasPinContext(el)) continue;
+
+    const digits = normalizeText(el.textContent ?? '').replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(digits)) continue;
+    if (!hasSeparateDigitChildren(el)) continue;
+
+    out.push(`PIN코드 6자리: ${digits}`);
+  }
+  return Array.from(new Set(out));
+}
+
+function hasSeparateDigitChildren(el: HTMLElement): boolean {
+  const digitChildren = Array.from(el.children).filter((child) =>
+    /^\d$/.test(normalizeText(child.textContent ?? '')),
+  );
+  return digitChildren.length >= 6;
+}
+
+function hasPinContext(el: HTMLElement): boolean {
+  let cur: HTMLElement | null = el;
+  while (cur && cur !== cur.ownerDocument.body) {
+    const text = normalizeText(cur.textContent ?? '');
+    if (/pin\s*코드|핀\s*코드|PIN\s*code/i.test(text)) return true;
+    cur = cur.parentElement;
+  }
+  const bodyText = normalizeText(el.ownerDocument.body?.textContent ?? '');
+  return /pin\s*코드|핀\s*코드|PIN\s*code/i.test(bodyText);
+}
+
+function isVisibleTextParent(el: HTMLElement, win: Window): boolean {
+  const tag = el.tagName.toLowerCase();
+  if (tag === 'script' || tag === 'style' || tag === 'noscript') return false;
+  if (el.getAttribute('aria-hidden') === 'true') return false;
+
+  const style = win.getComputedStyle(el);
+  if (style.visibility === 'hidden' || style.display === 'none') return false;
+
+  const rect = el.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return false;
+  return rect.bottom > -200 && rect.right > -200 && rect.top < (win.innerHeight || 0) + 2000;
+}
+
+function normalizeText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
 /** Strip noisy fields so the snapshot we send to the LLM is small. */
 export function snapshotForLlm(snapshot: DomSnapshot): DomSnapshot {
   const stripped: DomSnapshot = {
     url: snapshot.url,
     title: snapshot.title,
     capturedAt: snapshot.capturedAt,
+    ...(snapshot.textBlocks ? { textBlocks: snapshot.textBlocks } : {}),
     regions: {} as Record<RegionName, InteractiveElement[]>,
   };
   for (const [region, items] of Object.entries(snapshot.regions) as [
@@ -342,6 +472,11 @@ export function snapshotForLlm(snapshot: DomSnapshot): DomSnapshot {
       };
       if (it.groupLabel) out.groupLabel = it.groupLabel;
       if (it.href) out.href = it.href;
+      if (it.status) out.status = it.status;
+      if (it.context) out.context = it.context;
+      if (it.disabled !== undefined) out.disabled = it.disabled;
+      if (it.filled !== undefined) out.filled = it.filled;
+      if (it.checked !== undefined) out.checked = it.checked;
       return out;
     });
   }

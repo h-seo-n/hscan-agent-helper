@@ -1,18 +1,30 @@
 import { useState } from 'react';
 
 const IMAGES = [
-  { id: 'img-1', name: 'Knee (R)', kind: '자기공명영상검사(MRI)', date: '20260320' },
-  { id: 'img-2', name: 'Chest', kind: '일반사진(XC)', date: '20260319' },
-  { id: 'img-3', name: 'Brain', kind: '컴퓨터단층촬영(CT)', date: '20260317' },
-  { id: 'img-4', name: 'Spine', kind: '자기공명영상검사(MRI)', date: '20260311' },
+  { id: 'img-1', hospital: '서울병원', name: 'Knee (R)', kind: '자기공명영상검사(MRI)', date: '20260320' },
+  { id: 'img-2', hospital: '서울병원', name: 'Chest', kind: '일반사진(XC)', date: '20260319' },
+  { id: 'img-3', hospital: '컴퓨터의원', name: 'Brain', kind: '컴퓨터단층촬영(CT)', date: '20260317' },
+  { id: 'img-4', hospital: '컴퓨터의원', name: 'Spine', kind: '자기공명영상검사(MRI)', date: '20260311' },
 ];
 
-const ACTIONS = ['의사공유', '병원전달', 'CD신청', '다운로드', '삭제'];
+const ACTIONS = [
+  { id: 'share', label: '의사공유' },
+  { id: 'send', label: '병원전달' },
+  { id: 'cd-request', label: 'CD신청' },
+  { id: 'download', label: '다운로드' },
+  { id: 'delete', label: '삭제' },
+];
+
+interface ActionStatus {
+  actionId: string;
+  status: string;
+  message: string;
+}
 
 export function ImagesPage() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [toast, setToast] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] = useState<ActionStatus | null>(null);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -23,13 +35,22 @@ export function ImagesPage() {
     });
   };
 
-  const fire = (action: string) => {
-    setToast(`${action}: ${selected.size === 0 ? '선택된 영상 없음' : `${selected.size}건 처리 (mock)`}`);
-    window.setTimeout(() => setToast(null), 1800);
+  const fire = (action: (typeof ACTIONS)[number]) => {
+    const hasSelection = selected.size > 0;
+    const status = hasSelection ? `${action.id}-complete` : `${action.id}-empty`;
+    setActionStatus({
+      actionId: action.id,
+      status,
+      message: `${action.label}: ${hasSelection ? `${selected.size}건 처리 완료 (mock)` : '선택된 영상 없음'}`,
+    });
   };
 
+  const normalizedQuery = query.trim().toLowerCase();
   const filtered = IMAGES.filter(
-    (i) => !query || i.name.toLowerCase().includes(query.toLowerCase()),
+    (i) =>
+      !normalizedQuery ||
+      i.name.toLowerCase().includes(normalizedQuery) ||
+      i.hospital.toLowerCase().includes(normalizedQuery),
   );
 
   return (
@@ -65,6 +86,7 @@ export function ImagesPage() {
             </div>
             <div className="image-card__meta">
               <div className="image-card__name">{img.name}</div>
+              <div className="image-card__hospital">{img.hospital}</div>
               <div className="image-card__kind">{img.kind}</div>
               <div className="image-card__date">{img.date} 촬영</div>
             </div>
@@ -80,14 +102,30 @@ export function ImagesPage() {
       </button>
 
       <div className="images__actionbar" role="toolbar" aria-label="영상 작업">
-        {ACTIONS.map((a) => (
-          <button key={a} type="button" className="images__action" onClick={() => fire(a)}>
-            {a}
+        {ACTIONS.map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            data-aiwa-id={`btn-${action.id}`}
+            className="images__action"
+            onClick={() => fire(action)}
+          >
+            {action.label}
           </button>
         ))}
       </div>
 
-      {toast && <div className="images__toast">{toast}</div>}
+      {actionStatus && (
+        <div
+          id={`status-${actionStatus.status}`}
+          role="status"
+          data-aiwa-id={`status-${actionStatus.status}`}
+          data-aiwa-status={actionStatus.status}
+          className="images__status"
+        >
+          {actionStatus.message}
+        </div>
+      )}
     </div>
   );
 }
