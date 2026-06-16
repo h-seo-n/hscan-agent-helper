@@ -23,7 +23,7 @@ describe('extractSnapshot', () => {
     const logo = findById(snap, 'id:logo');
     const tab = findById(snap, 'tid:tab-images');
     const btn = findById(snap, 'id:btn-main');
-    const help = snap.regions.footer?.find((e: any) => e.label === '고객센터');
+    const help = snap.regions.footer?.find((e) => e.label === '고객센터');
 
     expect(logo?.region).toBe('header');
     expect(tab?.region).toBe('nav');
@@ -42,7 +42,7 @@ describe('extractSnapshot', () => {
     expect(link?.groupLabel).toBe('검사·진료');
   });
 
-  it('excludes password, disabled, hidden and zero-size elements', () => {
+  it('excludes password, hidden and zero-size elements while marking disabled controls', () => {
     setHtml(`
       <main>
         <input type="password" id="pw" />
@@ -54,8 +54,8 @@ describe('extractSnapshot', () => {
     const snap = extractSnapshot();
     const ids = collectIds(snap);
     expect(ids).not.toContain('id:pw');
-    expect(ids).not.toContain('id:d');
     expect(ids).not.toContain('id:h');
+    expect(findById(snap, 'id:d')?.disabled).toBe(true);
     expect(ids).toContain('id:ok');
   });
 
@@ -78,11 +78,114 @@ describe('extractSnapshot', () => {
     expect(ids).toContain('id:i1');
   });
 
+  it('includes clickable div cards marked with cursor-pointer', () => {
+    setHtml(`
+      <main>
+        <div class="rounded-xl cursor-pointer">
+          <span>내 영상 CD로 배송 받기</span>
+        </div>
+      </main>
+    `);
+    const snap = extractSnapshot();
+    const card = Object.values(snap.regions).flat().find((e) =>
+      e.label.includes('내 영상 CD로 배송 받기'),
+    );
+
+    expect(card?.tag).toBe('div');
+    expect(card?.id).toMatch(/^auto:/);
+  });
+
   it('includes checkbox checked state', () => {
     setHtml(`<main><label><input id="knee" type="checkbox" checked />Knee (R) 선택</label></main>`);
     const snap = extractSnapshot();
     const checkbox = findById(snap, 'id:knee');
     expect(checkbox?.checked).toBe(true);
+  });
+
+  it('includes only input filled state without exposing the typed value', () => {
+    setHtml(`<main><label for="cd-phone">연락처</label><input id="cd-phone" value="010-1234-5678" /></main>`);
+    const snap = extractSnapshot();
+    const input = findById(snap, 'id:cd-phone');
+    expect(input?.label).toBe('연락처');
+    expect(input?.filled).toBe(true);
+    expect(JSON.stringify(snap)).not.toContain('010-1234-5678');
+  });
+
+  it('includes persistent status elements for workflow completion signals', () => {
+    setHtml(`
+      <main>
+        <div
+          role="status"
+          data-aiwa-id="status-download-complete"
+          data-aiwa-status="download-complete"
+        >
+          다운로드: 1건 처리 완료 (mock)
+        </div>
+      </main>
+    `);
+    const snap = extractSnapshot();
+    const status = findById(snap, 'status-download-complete');
+    expect(status?.role).toBe('status');
+    expect(status?.label).toBe('다운로드: 1건 처리 완료 (mock)');
+    expect(status?.status).toBe('download-complete');
+  });
+
+  it('captures visible text blocks and nearby context for checkout screens', () => {
+    setHtml(`
+      <main>
+        <h1>신청 항목과 결제 금액을 확인해 주세요</h1>
+        <section>
+          <h2>등기우편으로 의료영상 CD 받기</h2>
+          <p>등기우편비 별도입니다</p>
+          <button id="address">배송지 입력하기</button>
+        </section>
+        <label><input id="agree" type="checkbox" /> 위 내용을 모두 확인했습니다.</label>
+        <footer>
+          <span>총 결제금액(세금포함)</span>
+          <strong>1,000원</strong>
+          <button id="pay" disabled>결제하기</button>
+        </footer>
+      </main>
+    `);
+
+    const snap = extractSnapshot();
+    const address = findById(snap, 'id:address');
+    const agree = findById(snap, 'id:agree');
+    const pay = findById(snap, 'id:pay');
+
+    expect(snap.textBlocks).toEqual(
+      expect.arrayContaining([
+        '신청 항목과 결제 금액을 확인해 주세요',
+        '등기우편으로 의료영상 CD 받기',
+        '총 결제금액(세금포함)',
+        '1,000원',
+      ]),
+    );
+    expect(address?.context).toContain('등기우편으로 의료영상 CD 받기');
+    expect(agree?.label).toBe('위 내용을 모두 확인했습니다.');
+    expect(agree?.checked).toBe(false);
+    expect(pay?.disabled).toBe(true);
+  });
+
+  it('combines separate PIN digit blocks into a readable text block', () => {
+    setHtml(`
+      <main>
+        <h1>PIN코드 6자리를 의사에게 알려주세요</h1>
+        <p>의료 영상을 확인할 의사에게 하단 URL주소에 들어가서 PIN코드를 입력하도록 안내해주세요.</p>
+        <div class="flex flex-wrap justify-center gap-1">
+          <div>1</div>
+          <div>8</div>
+          <div>7</div>
+          <div>0</div>
+          <div>9</div>
+          <div>8</div>
+        </div>
+      </main>
+    `);
+
+    const snap = extractSnapshot();
+
+    expect(snap.textBlocks).toContain('PIN코드 6자리: 187098');
   });
 });
 

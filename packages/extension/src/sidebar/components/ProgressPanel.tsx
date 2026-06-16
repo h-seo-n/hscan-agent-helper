@@ -11,6 +11,7 @@ const STATE_LABEL: Record<PlanSessionView['state'], string> = {
   'calling-plan': '플랜 생성 중…',
   'executing-step': '실행 중…',
   'awaiting-page-ready': '페이지 이동 중…',
+  'waiting-user': '사용자 조작 대기',
   done: '완료',
   failed: '실패',
 };

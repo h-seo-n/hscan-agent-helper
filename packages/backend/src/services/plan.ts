@@ -4,13 +4,14 @@ import {
   type DomSnapshot,
   type InteractiveElement,
   type PlanContext,
-  type InteractiveElement,
   type RegionName,
   zActionPlan,
 } from '@hscan/shared-types';
 import { env } from '../lib/env.js';
+import hscanScenarios from './hscan-scenarios.json';
 
 const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+const HSCAN_SCENARIOS_JSON = JSON.stringify(hscanScenarios, null, 2);
 
 const SYSTEM_PROMPT = `You are an in-browser navigator agent.
 Given a user's intent, the current page snapshot, and the history of what was done so far,
@@ -22,33 +23,93 @@ Hard rules:
 1. Every "targetId" you produce MUST appear verbatim in snapshot.regions. Never invent IDs.
    If you cannot find a suitable element, return a single explain step asking the user to clarify.
 2. If the user's intent cannot be satisfied on the CURRENT page, find a navigation element
-   (a tab, link or menu item) that leads toward the goal and emit ONE navigate step. Then STOP.
-   Do not append any further steps after a navigate. The system will re-invoke you with a new
-   snapshot once the new page is loaded.
-3. The same destination may be reachable via multiple paths with inconsistent names. Prefer the
-   link whose label most directly matches the user's intent. If the user says "다운로드" and
-   the home page has cards like "CD로 배송 받기" (loose match) and a tab "내 영상 목록" (which
-   leads to a list page where there is a literal "다운로드" button), prefer the tab.
-4. Treat a visible interactive card/button with a label that directly matches the intent as an
-   entry point on the current page. For Korean receive requests such as "내 영상 받고 싶어",
-   "영상 받기", or "병원 영상 받고 싶어", a card labeled "내 영상 병원에서 받기" is a direct
-   match when present. Highlight that card instead of asking the user to clarify.
-5. After arriving on the page that contains the actual entry point for the user's task, produce
-   a short plan: at minimum one highlight on the entry point and one explain telling the user
-   what to do there. Set done=true.
-6. Use executedSteps to understand what already happened on previous pages. Do not re-run a
-   navigation that already succeeded. If executedSteps shows you already navigated and the user
-   is now on the destination page, focus on highlighting the entry point.
-6. assistantMessage must be in the user's language (Korean here) and concise (one sentence).
-7. Each step must have a unique short "id" string (e.g. "s1", "s2").
-8. If all elements have region "unknown" (no semantic HTML landmarks), the page uses
+   (a tab, link or menu item) that leads toward the goal and highlight/explain it so the user can
+   click it directly. Do NOT emit navigate just to start a scenario or move to the scenario's
+   first entry point.
+   If you ever emit a navigate step for a later workflow action, emit only that one step and STOP.
+3. First classify the user's goal into exactly one HScan scenario from SCENARIOS below.
+   Do not classify by keyword alone. Use userGoal, disambiguationRules, currentPagePolicy,
+   entryPointLabels, optionLabels, and the current snapshot together.
+   Exact visible service names override loose semantic matches:
+   - If the user says "내 영상 병원에서 받기", classify as receive_from_partner_hospital.
+   - If the user says "내 영상 CD로 배송 받기", classify as issue_cd_from_existing_image.
+   - If the user says "내 영상 의사에게 보여주기", classify as show_to_doctor.
+   - If the user wants to send/show an image to a hospital that is not partnered with HScan
+     ("제휴 병원이 아닌 병원", "제휴 안 된 병원", "제휴되지 않은 병원", "외부 병원"),
+     classify as show_to_doctor and use the "내 영상 의사에게 보여주기" entry point.
+   - Only classify hospital delivery/transfer as send_existing_image_to_partner_hospital when the
+     destination is a partnered hospital or a hospital system that can receive HScan transfers.
+   - Never map "내 영상 병원에서 받기" to "의사공유" or show_to_doctor.
+   Then reason about the current page state before choosing a target:
+   - Identify whether snapshot.url, title, visible controls, or executedSteps show that the user
+     is already past the scenario's page-level entry point.
+   - If the user is already on the destination page or the destination page's action controls are
+     visible, do NOT target the navigation tab for that same page.
+   - Treat a navigation entry point such as "내 영상 목록" as completed when snapshot.url includes
+     its destinationHint (for example /images) or when in-page action controls such as "다운로드",
+     "의사공유", "병원전달", or "CD신청" are visible.
+   - In that case, choose the next in-page control required by the scenario, or explain what the
+     user must select next if the exact target is not visible.
+4. The same destination may be reachable via multiple paths with inconsistent names. Prefer the
+   visible element whose role in the scenario best matches the next required step.
+   If no visible element belongs to the selected scenario, do not substitute a button from a
+   different scenario just because it is visible. Return an explain step naming the correct
+   scenario entry point instead.
+5. If a scenario has both a page-level entry point and an action button, choose the next step for
+   the CURRENT page. Example: for download_image, highlight/explain "내 영상 목록" from home
+   so the user can click it, but highlight/explain "다운로드" when already on the image list.
+6. Multi-step scenario progress:
+   - Set done=true only when the user's scenario goal is actually complete, or when the user only
+     asked where something is.
+   - Do not set done=true merely because you found or highlighted the first entry point.
+   - For the first entry point of a scenario, do not click or navigate automatically. Emit
+     highlight + explain only, set done=false, and wait for the user to click the shown target.
+   - After the user has manually entered the next screen and the correct controls are visible, you
+     may use executable steps (click, input when a concrete value is known) for later workflow
+     actions.
+   - You may emit multiple steps in one plan only when every target is already visible in the
+     current snapshot and no earlier step is expected to change the page, open a modal, change a
+     list selection, or reveal new controls.
+   - If a step is expected to change the page or reveal new UI, emit that step alone and set
+     done=false. The system will execute it, collect a fresh snapshot, and ask you for the next
+     plan.
+   - Use executedSteps to identify the scenario progress already made, then choose the next
+     unfinished step toward the scenario goal.
+   - If the snapshot contains a scenario-specific completion status (for example role="status" or
+     status="download-complete"), treat the scenario as complete and return done=true without
+     repeating the completed action.
+   - For form workflows, filled inputs or a visible submit/confirm button are not completion.
+     Keep done=false until a scenario-specific submitted/completed status is visible, such as
+     status="cd-request-complete".
+7. Use executedSteps to understand what already happened on previous pages. Do not re-run a
+   navigation or first-entry guidance that already succeeded. If executedSteps or snapshot.url
+   shows the user is now on the destination page, focus on the next in-page action rather than the
+   entry point that got them there.
+8. assistantMessage must be in the user's language (Korean here) and concise (one sentence).
+9. Each step must have a unique short "id" string (e.g. "s1", "s2").
+10. If all elements have region "unknown" (no semantic HTML landmarks), the page uses
    div-only layout. In this case, infer purpose from:
    - "label": the element's visible text (e.g. "홈", "내 영상 목록", "내 정보" → nav tabs)
+   - "context": nearby visible text around an element, including card titles, warnings, totals,
+     and payment/checklist copy
+   - "textBlocks": visible non-interactive text on the current screen
+   - "disabled": disabled controls can still tell you the next workflow milestone, but do not ask
+     the user to click a disabled control until prerequisite controls such as address entry or
+     confirmation checkboxes are complete.
    - "visibleNow": prefer true elements as they are in the current viewport
    - "href": links with path hints (e.g. href="/images" → likely navigation to image list)
    - Common patterns: buttons with short labels like "홈"/"내 정보" at the bottom = tab bar (nav).
      Anchor tags with href="/" and no label = logo (skip). Buttons with user name = profile.
    Do NOT refuse to act just because region is "unknown". Use label and href to infer intent.
+11. For CD issue workflows, distinguish the image-list action "CD신청" from later checkout screens.
+   If textBlocks/context show a payment confirmation page such as "신청 항목과 결제 금액을 확인",
+   "등기우편으로 의료영상 CD 받기", "총 결제금액", "배송지 입력하기", confirmation checkbox text,
+   or "결제하기", do NOT go back to or repeat the earlier "CD신청" action. Choose the next visible
+   prerequisite on the current checkout screen: address entry first, then the confirmation checkbox,
+   then an enabled payment button. Keep done=false until a completion status is visible.
+
+SCENARIOS:
+${HSCAN_SCENARIOS_JSON}
 
 Output strictly the following JSON shape:
 { "steps": ActionStep[], "assistantMessage": string, "done": boolean }
@@ -68,7 +129,7 @@ Output:
   "done": true
 }
 
-Example 2 (navigate, then stop — note no steps after navigate):
+Example 2 (first entry point — show where the user should click, do not navigate):
 User intent: "내 영상 다운로드 받고 싶어"
 Snapshot summary: page /, nav has tab id="tid:tab-images" label="내 영상 목록".
 Output:
@@ -76,29 +137,45 @@ Output:
   "steps": [
     {
       "id": "s1",
-      "type": "navigate",
+      "type": "highlight",
       "targetId": "tid:tab-images",
-      "expectedUrlPattern": "/images",
-      "description": "영상 목록으로 이동합니다."
+      "description": "영상 목록 탭 위치"
+    },
+    {
+      "id": "s2",
+      "type": "explain",
+      "description": "다운로드를 진행하려면 이 탭을 직접 눌러 영상 목록으로 이동하세요."
     }
   ],
-  "assistantMessage": "영상 목록 페이지로 이동할게요.",
+  "assistantMessage": "영상 목록 탭을 눌러 이동해 주세요.",
   "done": false
 }
-Example 3 (multi-step on arrived page: highlight + input + click):
+Example 3 (arrived page, continue scenario instead of stopping at first entry):
 User intent: "내 영상 다운로드 받고 싶어"
 Snapshot summary: page /images, main has input id="search-input" label="병원명 또는 이름 검색",
 button id="btn-download" label="다운로드".
-executedSteps: [{ type: "navigate", status: "navigated", finishedAtUrl: "/" }]
+executedSteps may show only a previous highlight on "내 영상 목록", or may be empty if the user
+entered this page manually.
 Output:
 {
   "steps": [
     { "id": "s1", "type": "highlight", "targetId": "search-input", "description": "검색창 위치" },
-    { "id": "s2", "type": "input", "targetId": "search-input", "value": "", "description": "다운로드할 영상의 이름을 입력해 주세요." },
-    { "id": "s3", "type": "highlight", "targetId": "btn-download", "description": "다운로드 버튼 위치" },
-    { "id": "s4", "type": "explain", "description": "검색 후 다운로드 버튼을 누르면 영상을 받을 수 있어요." }
+    { "id": "s2", "type": "highlight", "targetId": "btn-download", "description": "영상 선택 후 다운로드 버튼 위치" },
+    { "id": "s3", "type": "explain", "description": "다운로드할 영상을 선택한 뒤 다운로드 버튼을 누르세요." }
   ],
-  "assistantMessage": "영상 이름을 검색한 뒤 다운로드 버튼을 눌러 주세요.",
+  "assistantMessage": "다운로드할 영상을 선택한 뒤 다운로드 버튼을 누르세요.",
+  "done": false
+}
+Example 4 (completion status visible — stop instead of repeating):
+User intent: "내 영상 다운로드 받고 싶어"
+Snapshot summary: page /images, main has status id="status-download-complete",
+label="다운로드: 1건 처리 완료 (mock)", status="download-complete".
+Output:
+{
+  "steps": [
+    { "id": "s1", "type": "explain", "description": "다운로드가 완료되었습니다." }
+  ],
+  "assistantMessage": "다운로드가 완료되었습니다.",
   "done": true
 }
 Example 4 (all regions unknown — div-only layout like real HScan):
@@ -109,22 +186,78 @@ Elements include:
   { id: "auto:abc-2", label: "내 영상 목록", href: null }
   { id: "auto:abc-3", label: "내 정보", href: null }
 
+Example 5 (CD request form is not complete yet):
+User intent: "내 영상 CD로 배송 받고 싶어"
+Snapshot summary: page /cd-request, main has input id="id:cd-recipient" label="수령인 이름"
+filled=true, input id="id:cd-phone" label="연락처" filled=false, input id="id:cd-address"
+label="배송 주소" filled=false.
+Output:
+{
+  "steps": [
+    { "id": "s1", "type": "highlight", "targetId": "id:cd-phone", "description": "연락처 입력 위치" },
+    { "id": "s2", "type": "explain", "description": "CD 배송 신청을 완료하려면 연락처와 배송 주소를 입력한 뒤 확인을 눌러야 합니다." }
+  ],
+  "assistantMessage": "연락처와 배송 주소를 입력한 뒤 확인을 눌러 주세요.",
+  "done": false
+}
+
+Example 6 (CD request completion status visible):
+User intent: "내 영상 CD로 배송 받고 싶어"
+Snapshot summary: page /cd-request, main has status id="status-cd-request-complete",
+label="CD 배송 신청이 완료되었습니다.", status="cd-request-complete".
+Output:
+{
+  "steps": [
+    { "id": "s1", "type": "explain", "description": "CD 배송 신청이 완료되었습니다." }
+  ],
+  "assistantMessage": "CD 배송 신청이 완료되었습니다.",
+  "done": true
+}
+
+Example 7 (CD checkout page after CD신청):
+User intent: "내 영상 CD로 배송 받고 싶어"
+Snapshot summary: textBlocks include "신청 항목과 결제 금액을 확인해 주세요",
+"등기우편으로 의료영상 CD 받기", "총 결제금액(세금포함)", "1,000원".
+main has button id="btn-address" label="배송지 입력하기", input id="agree-cd" label="위 내용을 모두 확인했습니다." checked=false,
+button id="btn-pay" label="결제하기" disabled=true.
+Output:
+{
+  "steps": [
+    { "id": "s1", "type": "highlight", "targetId": "btn-address", "description": "배송지 입력 위치" },
+    { "id": "s2", "type": "explain", "description": "CD 배송을 진행하려면 먼저 배송지를 입력해 주세요." }
+  ],
+  "assistantMessage": "먼저 배송지를 입력해 주세요.",
+  "done": false
+}
+
 Example 3 (home card is the current-page entry point):
-User intent: "내 영상 받고 싶어"
+User intent: "내 영상 병원에서 받기"
 Snapshot summary: page /, main has button id="id:card-receive" label="내 영상 병원에서 받기".
 Output:
 {
   "steps": [
     {
       "id": "s1",
-      "type": "navigate",
-      "targetId": "auto:abc-2",
-      "description": "영상 목록으로 이동합니다."
+      "type": "highlight",
+      "targetId": "id:card-receive",
+      "description": "병원 영상 받기 시작 위치"
+    },
+    {
+      "id": "s2",
+      "type": "explain",
+      "description": "병원에서 영상을 가져오려면 이 버튼을 직접 눌러 시작하세요."
     }
   ],
-  "assistantMessage": "영상 목록 페이지로 이동할게요.",
+  "assistantMessage": "병원 영상 받기는 이 버튼에서 직접 시작해 주세요.",
   "done": false
 }
+
+Counterexample:
+User intent: "내 영상 병원에서 받기"
+Snapshot summary: page /images, main has button id="btn-share" label="의사공유".
+Do NOT choose btn-share. "의사공유" belongs to show_to_doctor, not receive_from_partner_hospital.
+If the "내 영상 병원에서 받기" entry point is not visible on the current page, explain that the
+correct start point is not visible here and ask the user to go to the screen where that card is shown.
 `;
 
 export interface PlanResult {
@@ -133,9 +266,6 @@ export interface PlanResult {
 }
 
 export async function generatePlan(ctx: PlanContext): Promise<PlanResult> {
-  const deterministic = deterministicPlan(ctx);
-  if (deterministic) return deterministic;
-
   const userPayload = buildUserPayload(ctx);
 
   const attempt = async (extraInstruction?: string): Promise<PlanResult> => {
@@ -171,15 +301,7 @@ export async function generatePlan(ctx: PlanContext): Promise<PlanResult> {
   }
 }
 
-export function fallbackPlan(ctx?: PlanContext): PlanResult {
-  const deterministic = ctx ? deterministicPlan(ctx) : null;
-  if (deterministic) {
-    return {
-      ...deterministic,
-      warnings: ['fallback to deterministic snapshot match after two failures'],
-    };
-  }
-
+export function fallbackPlan(_ctx?: PlanContext): PlanResult {
   return {
     plan: {
       steps: [
@@ -195,555 +317,6 @@ export function fallbackPlan(ctx?: PlanContext): PlanResult {
       done: true,
     },
     warnings: ['fallback after two failures'],
-  };
-}
-
-export function deterministicPlan(ctx: PlanContext): PlanResult | null {
-  const message = latestMessage(ctx);
-  const intent = normalize(message);
-  if (intent.length < 2) return null;
-
-  const navClick = navClickPlan(ctx.snapshot, intent);
-  if (navClick) return navClick;
-
-  const imageAction = imageItemActionPlan(ctx.snapshot, intent);
-  if (imageAction) return imageAction;
-
-  const cdRequest = cdRequestPlan(ctx.snapshot, intent);
-  if (cdRequest) return cdRequest;
-
-  const explicitStep = explicitInteractionPlan(ctx.snapshot, intent);
-  if (explicitStep) return explicitStep;
-
-  for (const rule of DIRECT_RULES) {
-    if (!matchesAny(intent, rule.intent)) continue;
-    const target = findElement(ctx.snapshot, rule.labels);
-    if (target) return highlightPlan(target, rule);
-  }
-
-  const needsImagesPage =
-    matchesAny(intent, ['다운로드', '삭제', '검색', '영상검색', '목록', '리스트']) ||
-    matchesAny(intent, ['의사공유', '공유', '병원전달', '전달']);
-  if (needsImagesPage && !isImagesPage(ctx.snapshot)) {
-    const tab = findElement(ctx.snapshot, ['내영상목록']);
-    if (tab) {
-      return {
-        plan: {
-          steps: [
-            {
-              id: 's1',
-              type: 'navigate',
-              targetId: tab.id,
-              expectedUrlPattern: '/images',
-              description: '영상 목록으로 이동합니다.',
-            },
-          ],
-          assistantMessage: '영상 목록 페이지로 이동할게요.',
-          done: false,
-        },
-        warnings: [],
-      };
-    }
-  }
-
-  return null;
-}
-
-function cdRequestPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
-  if (
-    !matchesAny(intent, [
-      'CD신청',
-      'CD배송',
-      'CD로배송',
-      'CD받',
-      'CD로받',
-      'CD로받고',
-      '씨디신청',
-      '씨디배송',
-      '씨디받',
-      '씨디로받',
-    ])
-  ) {
-    return null;
-  }
-
-  if (isCdRequestPage(snapshot)) {
-    const firstInput = findElement(snapshot, ['수령인이름', '이름']);
-    if (!firstInput) return null;
-    return {
-      plan: {
-        steps: [
-          {
-            id: 's1',
-            type: 'input',
-            targetId: firstInput.id,
-            description: '먼저 수령인 이름을 입력하세요.',
-          },
-        ],
-        assistantMessage: 'CD 배송 신청을 위해 수령인 이름부터 입력하세요.',
-        done: true,
-      },
-      warnings: [],
-    };
-  }
-
-  const card = findElement(snapshot, ['내영상CD로배송받기']);
-  if (card) {
-    return {
-      plan: {
-        steps: [
-          {
-            id: 's1',
-            type: 'navigate',
-            targetId: card.id,
-            expectedUrlPattern: '/cd-request',
-            description: 'CD 배송 신청 페이지로 이동합니다.',
-          },
-        ],
-        assistantMessage: 'CD 배송 신청 페이지로 이동할게요.',
-        done: false,
-      },
-      warnings: [],
-    };
-  }
-
-  return {
-    plan: {
-      steps: [
-        {
-          id: 's1',
-          type: 'navigate',
-          url: '/cd-request',
-          expectedUrlPattern: '/cd-request',
-          description: 'CD 배송 신청 페이지로 이동합니다.',
-        },
-      ],
-      assistantMessage: 'CD 배송 신청 페이지로 이동할게요.',
-      done: false,
-    },
-    warnings: [],
-  };
-}
-
-interface NavClickRule {
-  intent: string[];
-  labels: string[];
-  description: string;
-  assistantMessage: string;
-}
-
-const NAV_CLICK_RULES: NavClickRule[] = [
-  {
-    intent: ['홈으로가', '홈가줘', '홈으로이동', '홈이동', '메인으로가', '처음으로가'],
-    labels: ['홈'],
-    description: '홈 탭으로 이동합니다.',
-    assistantMessage: '홈으로 이동할게요.',
-  },
-  {
-    intent: ['영상목록으로가', '영상목록가줘', '내영상목록으로가', '내영상목록가줘', '목록으로가'],
-    labels: ['내영상목록'],
-    description: '영상 목록 탭으로 이동합니다.',
-    assistantMessage: '영상 목록으로 이동할게요.',
-  },
-  {
-    intent: ['내정보로가', '내정보가줘', '마이페이지로가', '마이페이지가줘', '설정으로가'],
-    labels: ['내정보'],
-    description: '내 정보 탭으로 이동합니다.',
-    assistantMessage: '내 정보로 이동할게요.',
-  },
-];
-
-function navClickPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
-  const rule = NAV_CLICK_RULES.find((candidate) => matchesAny(intent, candidate.intent));
-  if (!rule) return null;
-
-  const target = findElement(snapshot, rule.labels);
-  if (!target) return null;
-
-  return {
-    plan: {
-      steps: [
-        {
-          id: 's1',
-          type: 'click',
-          targetId: target.id,
-          description: rule.description,
-        },
-      ],
-      assistantMessage: rule.assistantMessage,
-      done: true,
-    },
-    warnings: [],
-  };
-}
-
-interface ImageNameRule {
-  displayName: string;
-  aliases: string[];
-}
-
-interface ImageActionRule {
-  intent: string[];
-  labels: string[];
-  description: string;
-  assistantAction: string;
-}
-
-const IMAGE_NAME_RULES: ImageNameRule[] = [
-  {
-    displayName: 'Knee (R)',
-    aliases: ['Knee', 'Knee (R)', '무릎', '무를', '오른쪽무릎', '무릎오른쪽'],
-  },
-  {
-    displayName: 'Chest',
-    aliases: ['Chest', '흉부', '가슴', '폐', '엑스레이', 'xray', 'xc'],
-  },
-  {
-    displayName: 'Brain',
-    aliases: ['Brain', '뇌', '머리', '두부'],
-  },
-  {
-    displayName: 'Spine',
-    aliases: ['Spine', '척추', '허리', '등'],
-  },
-];
-
-const IMAGE_ACTION_RULES: ImageActionRule[] = [
-  {
-    intent: ['다운로드', '다운받', '내려받'],
-    labels: ['다운로드'],
-    description: '다운로드',
-    assistantAction: '다운로드할게요',
-  },
-  {
-    intent: ['삭제', '지우'],
-    labels: ['삭제'],
-    description: '삭제',
-    assistantAction: '삭제할게요',
-  },
-  {
-    intent: ['의사에게보여', '의사한테보여', '의사공유', '의사에게보내', '의사한테보내'],
-    labels: ['의사공유'],
-    description: '의사 공유',
-    assistantAction: '의사에게 공유할게요',
-  },
-  {
-    intent: ['병원으로보내', '병원에보내', '병원전달', '전달', '보내'],
-    labels: ['병원전달'],
-    description: '병원 전달',
-    assistantAction: '병원으로 전달할게요',
-  },
-  {
-    intent: ['CD신청', 'CD배송', 'CD로배송', 'CD받', '씨디신청', '씨디배송'],
-    labels: ['CD신청'],
-    description: 'CD 신청',
-    assistantAction: 'CD 신청할게요',
-  },
-];
-
-function imageItemActionPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
-  const image = findRequestedImage(intent);
-  const action = findRequestedImageAction(intent);
-  if (!image || !action) return null;
-
-  if (!isImagesPage(snapshot)) {
-    const tab = findElement(snapshot, ['내영상목록']);
-    if (!tab) return null;
-    return {
-      plan: {
-        steps: [
-          {
-            id: 's1',
-            type: 'navigate',
-            targetId: tab.id,
-            expectedUrlPattern: '/images',
-            description: '영상 목록으로 이동합니다.',
-          },
-        ],
-        assistantMessage: `${image.displayName} 영상을 처리하기 위해 영상 목록으로 이동할게요.`,
-        done: false,
-      },
-      warnings: [],
-    };
-  }
-
-  const checkbox = findImageCheckbox(snapshot, image);
-  const actionButton = findElement(snapshot, action.labels);
-  if (!checkbox || !actionButton) return null;
-  const otherCheckedImages = findCheckedImageCheckboxes(snapshot).filter(
-    (item) => item.id !== checkbox.id,
-  );
-
-  return {
-    plan: {
-      steps: [
-        ...otherCheckedImages.map((item, index) => ({
-          id: `s${index + 1}`,
-          type: 'click' as const,
-          targetId: item.id,
-          description: `${imageCheckboxName(item)} 영상 선택 해제`,
-        })),
-        ...(checkbox.checked
-          ? []
-          : [
-              {
-                id: `s${otherCheckedImages.length + 1}`,
-                type: 'click' as const,
-                targetId: checkbox.id,
-                description: `${image.displayName} 영상 선택`,
-              },
-            ]),
-        {
-          id: `s${otherCheckedImages.length + (checkbox.checked ? 1 : 2)}`,
-          type: 'click',
-          targetId: actionButton.id,
-          description: `${action.description} 실행`,
-        },
-      ],
-      assistantMessage: `${image.displayName} 영상을 선택한 뒤 ${action.assistantAction}.`,
-      done: true,
-    },
-    warnings: [],
-  };
-}
-
-function findRequestedImage(intent: string): ImageNameRule | null {
-  return (
-    IMAGE_NAME_RULES.find((rule) =>
-      rule.aliases.some((alias) => intent.includes(normalize(alias))),
-    ) ?? null
-  );
-}
-
-function findRequestedImageAction(intent: string): ImageActionRule | null {
-  return IMAGE_ACTION_RULES.find((rule) => matchesAny(intent, rule.intent)) ?? null;
-}
-
-function findImageCheckbox(snapshot: DomSnapshot, image: ImageNameRule): InteractiveElement | null {
-  const aliases = image.aliases.map(normalize);
-  return (
-    allElements(snapshot).find((item) => {
-      if (!item.visibleNow) return false;
-      if (item.tag !== 'input') return false;
-      const label = normalize(item.label);
-      return aliases.some((alias) => label.includes(alias));
-    }) ?? null
-  );
-}
-
-function findCheckedImageCheckboxes(snapshot: DomSnapshot): InteractiveElement[] {
-  return allElements(snapshot).filter((item) => {
-    if (!item.visibleNow || item.tag !== 'input' || !item.checked) return false;
-    const label = normalize(item.label);
-    return IMAGE_NAME_RULES.some((rule) =>
-      rule.aliases.some((alias) => label.includes(normalize(alias))),
-    );
-  });
-}
-
-function imageCheckboxName(item: InteractiveElement): string {
-  return item.label.replace(/\s*선택\s*$/, '').trim() || '기존';
-}
-
-function explicitInteractionPlan(snapshot: DomSnapshot, intent: string): PlanResult | null {
-  const type = explicitInteractionType(intent);
-  if (!type) return null;
-
-  const target = findExplicitTarget(snapshot, intent);
-  if (!target) return null;
-
-  const action = type === 'click' ? '클릭합니다.' : '이 위치로 이동합니다.';
-  return {
-    plan: {
-      steps: [
-        {
-          id: 's1',
-          type,
-          targetId: target.id,
-          description: `${target.label || '대상'} ${action}`,
-        },
-      ],
-      assistantMessage: `${target.label || '대상'} 위치를 ${type === 'click' ? '클릭할게요.' : '보여드릴게요.'}`,
-      done: true,
-    },
-    warnings: [],
-  };
-}
-
-function explicitInteractionType(intent: string): 'click' | 'scroll' | null {
-  if (matchesAny(intent, ['클릭', '눌러', '누르', '터치'])) return 'click';
-  if (matchesAny(intent, ['스크롤', '이동해', '위치로', '보여줘'])) return 'scroll';
-  return null;
-}
-
-function findExplicitTarget(snapshot: DomSnapshot, intent: string): InteractiveElement | null {
-  const ordinal = findOrdinalTarget(snapshot, intent);
-  if (ordinal) return ordinal;
-
-  for (const rule of DIRECT_RULES) {
-    if (!matchesAny(intent, rule.intent)) continue;
-    const target = findElement(snapshot, rule.labels);
-    if (target) return target;
-  }
-
-  const byLabel = allElements(snapshot).find((item) => item.visibleNow && normalize(item.label) && intent.includes(normalize(item.label)));
-  if (byLabel) return byLabel;
-
-  return null;
-}
-
-function findOrdinalTarget(snapshot: DomSnapshot, intent: string): InteractiveElement | null {
-  const cards = allElements(snapshot).filter((item) => item.visibleNow && item.tag === 'button' && normalize(item.id).includes('card'));
-  if (cards.length === 0) return null;
-  if (matchesAny(intent, ['첫번째', '첫째', '1번째', '1번'])) return cards[0] ?? null;
-  if (matchesAny(intent, ['두번째', '둘째', '2번째', '2번'])) return cards[1] ?? null;
-  if (matchesAny(intent, ['세번째', '셋째', '3번째', '3번'])) return cards[2] ?? null;
-  if (matchesAny(intent, ['네번째', '넷째', '4번째', '4번'])) return cards[3] ?? null;
-  return null;
-}
-
-interface DirectRule {
-  intent: string[];
-  labels: string[];
-  highlightDescription: string;
-  explainDescription: string;
-  assistantMessage: string;
-}
-
-const DIRECT_RULES: DirectRule[] = [
-  {
-    intent: ['의사에게보여', '의사한테보여', '의사공유', '공유'],
-    labels: ['내영상의사에게보여주기', '의사공유'],
-    highlightDescription: '의사에게 영상 보여주기 시작 위치',
-    explainDescription: '이 메뉴에서 담당 의사에게 영상 링크를 공유할 수 있습니다.',
-    assistantMessage: '의사에게 영상을 보여주려면 이 메뉴에서 시작하세요.',
-  },
-  {
-    intent: ['CD로배송', 'CD배송', 'CD받', 'CD로받', 'CD신청', '씨디'],
-    labels: ['내영상CD로배송받기', 'CD신청'],
-    highlightDescription: 'CD 신청 시작 위치',
-    explainDescription: '이 메뉴에서 영상 CD 배송을 신청할 수 있습니다.',
-    assistantMessage: '영상 CD를 받으려면 이 메뉴에서 시작하세요.',
-  },
-  {
-    intent: ['영상받', '받고싶', '병원영상', '병원에서받'],
-    labels: ['내영상병원에서받기'],
-    highlightDescription: '병원 영상 받기 시작 위치',
-    explainDescription: '이 카드를 눌러 병원에서 받은 영상을 가져오세요.',
-    assistantMessage: '병원에서 영상을 받으려면 이 메뉴에서 시작하세요.',
-  },
-  {
-    intent: ['병원으로보내', '병원에보내', '병원전달', '전달'],
-    labels: ['내영상병원으로보내기', '병원전달'],
-    highlightDescription: '병원으로 영상 보내기 시작 위치',
-    explainDescription: '이 메뉴에서 다른 병원 진료실로 영상을 전달할 수 있습니다.',
-    assistantMessage: '병원으로 영상을 보내려면 이 메뉴에서 시작하세요.',
-  },
-  {
-    intent: ['다운로드', '내려받'],
-    labels: ['다운로드'],
-    highlightDescription: '영상 다운로드 위치',
-    explainDescription: '영상을 선택한 뒤 이 버튼으로 다운로드할 수 있습니다.',
-    assistantMessage: '다운로드는 이 버튼에서 진행하세요.',
-  },
-  {
-    intent: ['삭제', '지우'],
-    labels: ['삭제'],
-    highlightDescription: '영상 삭제 위치',
-    explainDescription: '영상을 선택한 뒤 이 버튼으로 삭제할 수 있습니다.',
-    assistantMessage: '삭제는 이 버튼에서 진행하세요.',
-  },
-  {
-    intent: ['검색', '찾아', '찾고'],
-    labels: ['병원명또는이름검색'],
-    highlightDescription: '영상 검색창 위치',
-    explainDescription: '여기에 병원명이나 영상 이름을 입력해 검색하세요.',
-    assistantMessage: '영상 검색은 이 입력창에서 할 수 있습니다.',
-  },
-  {
-    intent: ['올리', '업로드'],
-    labels: ['영상올리기'],
-    highlightDescription: '영상 올리기 위치',
-    explainDescription: '이 버튼으로 새 영상을 올릴 수 있습니다.',
-    assistantMessage: '영상 올리기는 이 버튼에서 시작하세요.',
-  },
-  {
-    intent: ['내정보', '마이페이지', '설정'],
-    labels: ['내정보'],
-    highlightDescription: '내 정보 탭 위치',
-    explainDescription: '이 탭에서 내 정보 화면으로 이동할 수 있습니다.',
-    assistantMessage: '내 정보는 이 탭에서 확인하세요.',
-  },
-  {
-    intent: ['고객센터', '문의'],
-    labels: ['고객센터'],
-    highlightDescription: '고객센터 위치',
-    explainDescription: '도움이 필요하면 이 링크를 눌러 고객센터로 이동하세요.',
-    assistantMessage: '고객센터는 이 링크에서 열 수 있습니다.',
-  },
-  {
-    intent: ['가이드', 'CD발급'],
-    labels: ['CD발급가이드'],
-    highlightDescription: 'CD 발급 가이드 위치',
-    explainDescription: 'CD 발급 방법은 이 가이드에서 확인할 수 있습니다.',
-    assistantMessage: 'CD 발급 가이드는 이 링크에서 확인하세요.',
-  },
-];
-
-function latestMessage(ctx: PlanContext): string {
-  return ctx.history[ctx.history.length - 1]?.content ?? ctx.originalUserMessage;
-}
-
-function normalize(value: string): string {
-  return value.replace(/\s+/g, '').toLowerCase();
-}
-
-function matchesAny(value: string, needles: string[]): boolean {
-  return needles.some((needle) => value.includes(normalize(needle)));
-}
-
-function findElement(snapshot: DomSnapshot, labels: string[]): InteractiveElement | null {
-  const normalizedLabels = labels.map(normalize);
-  for (const item of allElements(snapshot)) {
-    if (!item.visibleNow) continue;
-    const label = normalize(item.label);
-    if (normalizedLabels.some((candidate) => label.includes(candidate))) return item;
-  }
-  return null;
-}
-
-function allElements(snapshot: DomSnapshot): InteractiveElement[] {
-  return Object.values(snapshot.regions).flatMap((items) => items ?? []);
-}
-
-function isImagesPage(snapshot: DomSnapshot): boolean {
-  return snapshot.url.includes('/images') || Boolean(findElement(snapshot, ['다운로드', '의사공유']));
-}
-
-function isCdRequestPage(snapshot: DomSnapshot): boolean {
-  return snapshot.url.includes('/cd-request') || Boolean(findElement(snapshot, ['수령인이름']));
-}
-
-function highlightPlan(target: InteractiveElement, rule: DirectRule): PlanResult {
-  return {
-    plan: {
-      steps: [
-        {
-          id: 's1',
-          type: 'highlight',
-          targetId: target.id,
-          description: rule.highlightDescription,
-        },
-        {
-          id: 's2',
-          type: 'explain',
-          description: rule.explainDescription,
-        },
-      ],
-      assistantMessage: rule.assistantMessage,
-      done: true,
-    },
-    warnings: [],
   };
 }
 
@@ -807,6 +380,7 @@ function compressSnapshot(snapshot: DomSnapshot): DomSnapshot {
     url: snapshot.url,
     title: snapshot.title,
     capturedAt: snapshot.capturedAt,
+    ...(snapshot.textBlocks ? { textBlocks: snapshot.textBlocks } : {}),
     regions: {} as Record<RegionName, InteractiveElement[]>,
   };
 
@@ -850,6 +424,11 @@ function stripFields(it: InteractiveElement): InteractiveElement {
   };
   if (it.groupLabel) out.groupLabel = it.groupLabel;
   if (it.href) out.href = it.href;
+  if (it.status) out.status = it.status;
+  if (it.context) out.context = it.context;
+  if (it.disabled !== undefined) out.disabled = it.disabled;
+  if (it.filled !== undefined) out.filled = it.filled;
+  if (it.checked !== undefined) out.checked = it.checked;
 
   return out;
 }

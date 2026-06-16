@@ -6,6 +6,7 @@ import { HomePage } from './pages/HomePage';
 import { MyPage } from './pages/MyPage';
 import { ImagesPage } from './pages/ImagesPage';
 import { CdRequestPage } from './pages/CdRequestPage';
+import { ReceivePage } from './pages/ReceivePage';
 import './styles.css';
 
 const container = document.getElementById('root');
@@ -20,6 +21,7 @@ createRoot(container).render(
           <Route path="/my" element={<MyPage />} />
           <Route path="/images" element={<ImagesPage />} />
           <Route path="/cd-request" element={<CdRequestPage />} />
+          <Route path="/receive" element={<ReceivePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppShell>

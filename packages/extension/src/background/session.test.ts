@@ -40,6 +40,12 @@ const inputPlan: ActionPlan = {
   done: true,
 };
 
+const nonTerminalHighlightPlan: ActionPlan = {
+  steps: [{ id: 's1', type: 'highlight', targetId: 'auto:abc-1', description: '검색창' }],
+  assistantMessage: '검색창을 확인해 주세요.',
+  done: false,
+};
+
 describe('PlanSession transitions', () => {
   it('loadPlan moves to executing-step', () => {
     const s = makeSession();
@@ -47,6 +53,17 @@ describe('PlanSession transitions', () => {
     expect(s.state).toBe('executing-step');
     expect(t.kind).toBe('execute-next-step');
     expect(currentStep(s)?.id).toBe('s1');
+  });
+
+  it('loadPlan does not finish an incomplete scenario with no executable steps', () => {
+    const s = makeSession();
+    const t = loadPlan(s, {
+      steps: [],
+      assistantMessage: '다음 단계를 찾지 못했어요.',
+      done: false,
+    });
+    expect(t.kind).toBe('finish-failed');
+    expect(s.state).toBe('failed');
   });
 
   it('navigate step → awaiting-page-ready', () => {
@@ -90,14 +107,36 @@ describe('PlanSession transitions', () => {
     expect(t.kind).toBe('finish-failed');
   });
 
-  it('waiting-user input step finishes without re-executing the same step', () => {
+  it('waiting-user input step pauses the session for user action instead of ending it', () => {
     const s = makeSession();
     loadPlan(s, inputPlan);
     const t = applyStepResult(s, 's1', 'waiting-user', 'http://x/cd-request');
-    expect(t.kind).toBe('finish-done');
-    expect(s.state).toBe('done');
+    expect(t.kind).toBe('wait-for-user');
+    expect(s.state).toBe('waiting-user');
     expect(s.currentStepIndex).toBe(1);
     expect(s.executedSteps[0]?.status).toBe('waiting-user');
+  });
+
+  it('exhausted passive non-terminal plan pauses for the user instead of looping', () => {
+    const s = makeSession();
+    loadPlan(s, nonTerminalHighlightPlan);
+    const t = applyStepResult(s, 's1', 'done', 'http://x/images');
+    expect(t.kind).toBe('wait-for-user');
+    expect(s.state).toBe('waiting-user');
+    expect(s.currentStepIndex).toBe(1);
+  });
+
+  it('exhausted non-terminal click plan requests a fresh snapshot for the next LLM decision', () => {
+    const s = makeSession();
+    loadPlan(s, {
+      steps: [{ id: 's1', type: 'click', targetId: 'btn-next', description: '다음 단계' }],
+      assistantMessage: '다음 단계로 진행할게요.',
+      done: false,
+    });
+    const t = applyStepResult(s, 's1', 'done', 'http://x/images');
+    expect(t.kind).toBe('fetch-snapshot');
+    expect(s.state).toBe('fetching-snapshot');
+    expect(s.currentStepIndex).toBe(1);
   });
 
   it('full sequence: navigate → page-ready → replan → highlight → done', () => {
