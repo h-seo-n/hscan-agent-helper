@@ -11,7 +11,7 @@
     "default_path": "src/sidebar/index.html"
   },
   "permissions": ["sidePanel", "scripting", "activeTab", "storage"],
-  "host_permissions": ["<all_urls>", "http://localhost:5174/*"],
+  "host_permissions": ["<all_urls>", "https://demoscan-tau.vercel.app/", "http://localhost:5174/*"],
   "background": {
     "service_worker": "src/background/index.ts",
     "type": "module"
