@@ -9,7 +9,7 @@
 
 > - 서버: https://hscan-agent-helper-production.up.railway.app
 >- DemoScan: https://demoscan-tau.vercel.app/
->- Extension 빌드: https://drive.google.com/file/d/1jOwlRX1ms75sOiJBKOkG_wvs8zKeB5Gn/view?usp=sharing
+>- Extension 빌드: https://drive.google.com/file/d/1A-GHK4f7DpkbAVBAlDGwViRmpLEWp1o2/view?usp=sharing 
 
 
 1. Extension 빌드 파일을 내려받아 압축을 해제한다.
